@@ -6,16 +6,25 @@ export class LFO {
         this.x = x;
         this.y = y;
         this.width = 120;
-        this.height = 140; // Aumentar altura
+        this.height = 140;
         this.type = 'LFO';
 
         this.oscillator = audioContext.createOscillator();
-        this.oscillator.frequency.setValueAtTime(5, audioContext.currentTime);
+        this.oscillator.frequency.setValueAtTime(8, audioContext.currentTime); // Valor por defecto ajustado
         
         this.depth = audioContext.createGain();
-        this.depth.gain.value = 100;
+        this.depth.gain.value = 3; // Valor por defecto ajustado
+
+        // --- Gate control ---
+        this.gateGain = audioContext.createGain();
+        this.gateGain.gain.value = 0; // Silenciado por defecto
+
+        this.outputScaler = audioContext.createGain();
+        this.outputScaler.gain.value = 0.04; // Atenuar más la salida para un control más fino
 
         this.oscillator.connect(this.depth);
+        this.depth.connect(this.gateGain);
+        this.gateGain.connect(this.outputScaler);
         this.oscillator.start();
         
         this.activeControl = null;
@@ -25,10 +34,11 @@ export class LFO {
         this.oscillator.type = 'sine';
 
         this.inputs = {
-            'Rate CV': { x: this.width / 2, y: this.height, type: 'cv', target: this.oscillator.frequency, orientation: 'vertical' }
+            'Rate CV': { x: this.width / 2, y: 0, type: 'cv', target: this.oscillator.frequency, orientation: 'vertical' },
+            'Gate': { x: this.width / 2, y: this.height, type: 'gate', target: this.gateGain.gain, orientation: 'vertical' }
         };
         this.outputs = {
-            'SALIDA': { x: this.width, y: this.height / 2, type: 'cv', source: this.depth, orientation: 'horizontal' }
+            'SALIDA': { x: this.width, y: this.height / 2, type: 'cv', source: this.outputScaler, orientation: 'horizontal' }
         };
     }
 
@@ -116,7 +126,7 @@ export class LFO {
             ctx.fillStyle = isHovered('input', name) ? 'white' : '#4a90e2';
             ctx.fill();
             ctx.textAlign = 'center';
-            ctx.fillText(name, x, y + connectorRadius + 12);
+            ctx.fillText(name, x, props.orientation === 'vertical' ? y + (props.y > this.height/2 ? connectorRadius + 12 : -connectorRadius - 4) : 0);
         });
 
         Object.entries(this.outputs).forEach(([name, props]) => {
@@ -194,6 +204,8 @@ export class LFO {
 
     disconnect() {
         this.oscillator.disconnect();
+        this.gateGain.disconnect();
+        this.outputScaler.disconnect();
     }
 
     getState() {

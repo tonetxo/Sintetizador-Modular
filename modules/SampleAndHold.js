@@ -15,6 +15,14 @@ export class SampleAndHold {
         this.node = null;
         this.isReady = false;
 
+        this.inputs = {
+            'IN': { x: 0, y: 40, type: 'cv', target: null, inputIndex: 0, orientation: 'horizontal' },
+            'TRIG': { x: 0, y: 80, type: 'gate', target: null, inputIndex: 1, orientation: 'horizontal' }
+        };
+        this.outputs = {
+            'OUT': { x: this.width, y: this.height / 2, type: 'cv', source: null, orientation: 'horizontal' }
+        };
+
         this.readyPromise = workletPromise.then(() => {
             this.node = new AudioWorkletNode(audioContext, 'sample-and-hold-processor', {
                 numberOfInputs: 2,
@@ -23,16 +31,11 @@ export class SampleAndHold {
             this.inputs['IN'].target = this.node;
             this.inputs['TRIG'].target = this.node;
             this.outputs['OUT'].source = this.node;
+            
             this.isReady = true;
+        }).catch(err => {
+            console.error("S&H Module failed to become ready:", err);
         });
-
-        this.inputs = {
-            'IN': { x: 0, y: 40, type: 'cv', target: null, inputIndex: 0, orientation: 'horizontal' },
-            'TRIG': { x: 0, y: 80, type: 'gate', target: null, inputIndex: 1, orientation: 'horizontal' }
-        };
-        this.outputs = {
-            'OUT': { x: this.width, y: this.height / 2, type: 'cv', source: null, orientation: 'horizontal' }
-        };
     }
 
     draw(ctx, isSelected, hoveredConnectorInfo) {
@@ -40,6 +43,7 @@ export class SampleAndHold {
         ctx.translate(this.x, this.y);
 
         ctx.globalAlpha = this.isReady ? 1.0 : 0.5;
+
         ctx.fillStyle = '#222';
         ctx.strokeStyle = isSelected ? '#aaffff' : '#E0E0E0';
         ctx.lineWidth = 2;
@@ -51,24 +55,32 @@ export class SampleAndHold {
         ctx.textAlign = 'center';
         ctx.fillText('S & H', this.width / 2, 22);
         
-        ctx.strokeStyle = '#E0E0E0';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        const sx = 30, sy = 80, step = 15;
-        ctx.moveTo(sx, sy);
-        ctx.lineTo(sx + step, sy);
-        ctx.lineTo(sx + step, sy - step);
-        ctx.lineTo(sx + 2 * step, sy - step);
-        ctx.lineTo(sx + 2 * step, sy - 2 * step);
-        ctx.lineTo(sx + 3 * step, sy - 2 * step);
-        ctx.stroke();
+        if (this.isReady) {
+            ctx.strokeStyle = '#E0E0E0';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            const sx = 30, sy = 80, step = 15;
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(sx + step, sy);
+            ctx.lineTo(sx + step, sy - step);
+            ctx.lineTo(sx + 2 * step, sy - step);
+            ctx.lineTo(sx + 2 * step, sy - 2 * step);
+            ctx.lineTo(sx + 3 * step, sy - 2 * step);
+            ctx.stroke();
+        } else {
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#ff80ab';
+            ctx.fillText('Cargando...', this.width / 2, this.height / 2 + 10);
+        }
 
         ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
     }
 
     drawConnectors(ctx, hovered) {
-        ctx.globalAlpha = this.isReady ? 1.0 : 0.5;
+        if (!this.isReady) return;
+
+        ctx.globalAlpha = 1.0;
         const isHovered = (type, name) => hovered && hovered.module === this && hovered.connector.type === type && hovered.connector.name === name;
         const connectorRadius = 8;
         ctx.font = '10px Arial';
@@ -100,7 +112,6 @@ export class SampleAndHold {
             ctx.textAlign = 'right';
             ctx.fillText(name, x - connectorRadius - 4, y + 4);
         });
-        ctx.globalAlpha = 1.0;
     }
 
     getConnectorAt(x, y) {

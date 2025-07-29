@@ -9,10 +9,8 @@ export class ADSR {
         this.height = 120;
         this.type = 'ADSR';
 
-        this.params = { attack: 0.05, decay: 0.1, sustain: 0.6, release: 0.5 };
-        this.activeControl = null;
-        this.paramHotspots = {};
-
+        this.params = { attack: 0.1, decay: 0.2, sustain: 0.6, release: 0.5 };
+        
         this.outputNode = audioContext.createGain();
         this.outputNode.gain.value = 0;
         
@@ -23,8 +21,45 @@ export class ADSR {
 
         this.inputs = { 'Disparo': { x: 0, y: this.height / 2, type: 'gate', orientation: 'horizontal' } };
         this.outputs = { 'C.V.': { x: this.width, y: this.height / 2, type: 'cv', source: this.outputNode, orientation: 'horizontal' } };
+
+        // --- Propiedades para el control gráfico ---
+        this.controlPoints = { a: {}, d: {}, r: {} };
+        this.draggingPoint = null;
+        this.controlPointRadius = 5;
+        this.editorBox = { x: 15, y: 35, w: this.width - 30, h: this.height - 55 };
+        
+        // Inicializar las posiciones de los puntos a partir de los parámetros
+        this.updateControlPointsFromParams();
     }
     
+    updateControlPointsFromParams() {
+        const box = this.editorBox;
+        const maxTime = 2.0; // Tiempo máximo visual para A+D+R
+
+        const attackX = box.x + (this.params.attack / maxTime) * box.w;
+        const decayX = attackX + (this.params.decay / maxTime) * box.w;
+        const releaseX = decayX + (this.params.release / maxTime) * box.w;
+        const sustainY = box.y + box.h * (1 - this.params.sustain);
+
+        this.controlPoints.a = { x: Math.min(attackX, box.x + box.w), y: box.y };
+        this.controlPoints.d = { x: Math.min(decayX, box.x + box.w), y: sustainY };
+        this.controlPoints.r = { x: Math.min(releaseX, box.x + box.w), y: box.y + box.h };
+    }
+
+    updateParamsFromControlPoints() {
+        const box = this.editorBox;
+        const maxTime = 2.0; // Tiempo máximo que puede representar el ancho total
+
+        const attackRatio = (this.controlPoints.a.x - box.x) / box.w;
+        const decayRatio = (this.controlPoints.d.x - this.controlPoints.a.x) / box.w;
+        const releaseRatio = (this.controlPoints.r.x - this.controlPoints.d.x) / box.w;
+
+        this.params.attack = Math.max(0.01, attackRatio * maxTime);
+        this.params.decay = Math.max(0.01, decayRatio * maxTime);
+        this.params.release = Math.max(0.01, releaseRatio * maxTime);
+        this.params.sustain = Math.max(0, 1 - (this.controlPoints.d.y - box.y) / box.h);
+    }
+
     trigger() {
         const now = audioContext.currentTime;
         const gain = this.outputNode.gain;
@@ -57,54 +92,31 @@ export class ADSR {
         ctx.textAlign = 'center';
         ctx.fillText('ADSR', this.width / 2, 22);
 
-        this.drawEnvelopeShape(ctx);
-        this.drawParams(ctx);
+        this.drawEnvelopeEditor(ctx);
         
         ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
     }
     
-    drawEnvelopeShape(ctx) {
-        ctx.strokeStyle = '#E0E0E0';
+    drawEnvelopeEditor(ctx) {
+        const box = this.editorBox;
+
+        // La curva se dibuja directamente desde las posiciones guardadas
+        ctx.strokeStyle = '#aaffff';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        const box = { x: 20, y: 35, w: this.width - 40, h: 45 };
-        const startX = box.x;
-        const startY = box.y + box.h;
-        const peakY = box.y;
-        const sustainY = box.y + box.h * (1 - this.params.sustain);
-        
-        const totalTime = this.params.attack + this.params.decay + 0.2 + this.params.release;
-        const attackWidth = (this.params.attack / totalTime) * box.w;
-        const decayWidth = (this.params.decay / totalTime) * box.w;
-        const releaseWidth = (this.params.release / totalTime) * box.w;
-        const sustainWidth = box.w - (attackWidth + decayWidth + releaseWidth);
-
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(startX + attackWidth, peakY);
-        ctx.lineTo(startX + attackWidth + decayWidth, sustainY);
-        if (sustainWidth > 0) ctx.lineTo(startX + attackWidth + decayWidth + sustainWidth, sustainY);
-        ctx.lineTo(box.x + box.w, startY);
+        ctx.moveTo(box.x, box.y + box.h); // Start
+        ctx.lineTo(this.controlPoints.a.x, this.controlPoints.a.y); // Attack
+        ctx.lineTo(this.controlPoints.d.x, this.controlPoints.d.y); // Decay
+        ctx.lineTo(this.controlPoints.r.x, this.controlPoints.r.y); // Release
         ctx.stroke();
-    }
 
-    drawParams(ctx) {
-        ctx.font = '11px Arial';
-        let currentX = 15;
-        const paramY = this.height - 10;
-
-        Object.keys(this.params).forEach(p => {
-            ctx.textAlign = 'left';
-            const label = `${p.charAt(0).toUpperCase()}:`;
-            const value = this.params[p].toFixed(2);
-            const segment = `${label}${value} `;
-            const segmentWidth = ctx.measureText(segment).width;
-
-            ctx.fillStyle = (this.activeControl === p) ? '#aaffff' : '#E0E0E0';
-            ctx.fillText(segment, currentX, paramY);
-            
-            this.paramHotspots[p] = { x: currentX, y: paramY - 10, width: segmentWidth, height: 12 };
-            currentX += segmentWidth + 5;
+        // Dibujar los puntos de control
+        ctx.fillStyle = '#f0a048';
+        Object.values(this.controlPoints).forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, this.controlPointRadius, 0, 2 * Math.PI);
+            ctx.fill();
         });
     }
 
@@ -141,34 +153,49 @@ export class ADSR {
     }
 
     checkInteraction(pos) {
-        for (const [param, rect] of Object.entries(this.paramHotspots)) {
-            const worldRect = { x: this.x + rect.x, y: this.y + rect.y, width: rect.width, height: rect.height };
-            if (pos.x >= worldRect.x && pos.x <= worldRect.x + worldRect.width &&
-                pos.y >= worldRect.y && pos.y <= worldRect.y + worldRect.height) {
-                this.activeControl = param;
+        const localPos = { x: pos.x - this.x, y: pos.y - this.y };
+        for (const [name, p] of Object.entries(this.controlPoints)) {
+            const dist = Math.sqrt(Math.pow(localPos.x - p.x, 2) + Math.pow(localPos.y - p.y, 2));
+            if (dist < this.controlPointRadius + 4) {
+                this.draggingPoint = name;
                 return true;
             }
         }
         return false;
     }
 
-    handleDragInteraction(dx, dy, isFine) {
-        if (!this.activeControl) return;
-        const coarse = 0.005;
-        const fine = 0.0005;
-        const sensitivity = -dy * (isFine ? fine : coarse);
-        
-        switch(this.activeControl) {
-            case 'attack': case 'decay': case 'release':
-                this.params[this.activeControl] = Math.max(0.01, this.params[this.activeControl] + sensitivity);
-                break;
-            case 'sustain':
-                this.params.sustain = Math.max(0, Math.min(1, this.params.sustain + sensitivity));
-                break;
+    handleDragInteraction(dx, dy) {
+        if (!this.draggingPoint) return;
+
+        const box = this.editorBox;
+        const point = this.controlPoints[this.draggingPoint];
+        point.x += dx;
+        point.y += dy;
+
+        // Limitar el movimiento de los puntos al interior de la caja
+        point.x = Math.max(box.x, Math.min(point.x, box.x + box.w));
+        point.y = Math.max(box.y, Math.min(point.y, box.y + box.h));
+
+        // Forzar puntos A y R a los bordes superior/inferior
+        if (this.draggingPoint === 'a') point.y = box.y;
+        if (this.draggingPoint === 'r') point.y = box.y + box.h;
+
+        // Evitar que los puntos se crucen en el eje X
+        if (this.draggingPoint === 'a') {
+            point.x = Math.min(point.x, this.controlPoints.d.x - 1);
+        } else if (this.draggingPoint === 'd') {
+            point.x = Math.max(point.x, this.controlPoints.a.x + 1);
+            point.x = Math.min(point.x, this.controlPoints.r.x - 1);
+        } else if (this.draggingPoint === 'r') {
+            point.x = Math.max(point.x, this.controlPoints.d.x + 1);
         }
+
+        this.updateParamsFromControlPoints();
     }
 
-    endInteraction() { this.activeControl = null; }
+    endInteraction() {
+        this.draggingPoint = null;
+    }
 
     getConnectorAt(x, y) {
         for (const [name, props] of Object.entries(this.inputs)) {
@@ -195,5 +222,6 @@ export class ADSR {
     setState(state) {
         this.x = state.x; this.y = state.y;
         this.params = { ...state.params };
+        this.updateControlPointsFromParams();
     }
 }

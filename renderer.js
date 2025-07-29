@@ -309,13 +309,10 @@ function setupEventListeners() {
     });
 }
 
-async function addModule(type, x, y) {
+function addModule(type, x, y) {
     const ModuleClass = MODULE_CLASSES[type];
     if (ModuleClass) {
         const newModule = new ModuleClass(x, y);
-        if (newModule.readyPromise) {
-            await newModule.readyPromise;
-        }
         modules.push(newModule);
         selectedModule = newModule;
     }
@@ -470,14 +467,19 @@ function onMouseUp(e) {
             const inputType = hit.connector.props.type;
             const isCompatible = (outputType === inputType) || 
                                  (outputType === 'audio' && inputType === 'cv') ||
-                                 (outputType === 'cv' && inputType === 'gate');
+                                 (outputType === 'cv' && inputType === 'gate') ||
+                                 (outputType === 'gate' && inputType === 'gate');
 
             if (isCompatible) {
-                if (patchStart.connector.props.type === 'gate') {
-                    if (patchStart.module.connectGate) patchStart.module.connectGate(hit.module);
-                } else {
+                // Conexión de señal (para LFO, VCA, etc.)
+                if (patchStart.connector.props.source && hit.connector.props.target) {
                     connectNodes(patchStart.connector.props.source, hit.connector.props);
                 }
+                // Conexión de evento (para el ADSR)
+                if (patchStart.connector.props.type === 'gate' && patchStart.module.connectGate) {
+                    patchStart.module.connectGate(hit.module);
+                }
+
                 connections.push({
                     fromModule: patchStart.module, fromConnector: patchStart.connector,
                     toModule: hit.module, toConnector: hit.connector,

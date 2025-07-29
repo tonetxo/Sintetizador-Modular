@@ -1,0 +1,108 @@
+{
+  "modules": [
+    {
+      "type": "Keyboard",
+      "x": 354.5,
+      "y": 438,
+      "isPermanent": true
+    },
+    {
+      "type": "Output",
+      "x": 1084.5,
+      "y": 305,
+      "isPermanent": true
+    },
+    {
+      "type": "VCO",
+      "x": 90,
+      "y": 120,
+      "waveform": "triangle"
+    },
+    {
+      "type": "VCF",
+      "x": 607,
+      "y": 159,
+      "cutoff": 1000,
+      "q": 1
+    },
+    {
+      "type": "VCA",
+      "x": 874,
+      "y": 166
+    },
+    {
+      "type": "ADSR",
+      "x": 764,
+      "y": 465,
+      "params": {
+        "attack": 0.6233333333333333,
+        "decay": 0.013333333333333334,
+        "sustain": 0.5692307692307692,
+        "release": 0.4166666666666667
+      }
+    },
+    {
+      "type": "LFO",
+      "x": 88,
+      "y": 399,
+      "rate": 4.021782398223877,
+      "depth": 93.311279296875,
+      "waveform": "square"
+    },
+    {
+      "type": "SampleAndHold",
+      "x": 345,
+      "y": 210
+    }
+  ],
+  "connections": [
+    {
+      "from": 3,
+      "fromConnector": "audio",
+      "to": 4,
+      "toConnector": "audio"
+    },
+    {
+      "from": 0,
+      "fromConnector": "TENSION",
+      "to": 2,
+      "toConnector": "1V/Oct"
+    },
+    {
+      "from": 0,
+      "fromConnector": "DISPARO",
+      "to": 5,
+      "toConnector": "Disparo"
+    },
+    {
+      "from": 5,
+      "fromConnector": "C.V.",
+      "to": 4,
+      "toConnector": "CV 1"
+    },
+    {
+      "from": 4,
+      "fromConnector": "audio",
+      "to": 1,
+      "toConnector": "audio"
+    },
+    {
+      "from": 0,
+      "fromConnector": "DISPARO",
+      "to": 6,
+      "toConnector": "Gate"
+    },
+    {
+      "from": 2,
+      "fromConnector": "audio",
+      "to": 7,
+      "toConnector": "IN"
+    },
+    {
+      "from": 6,
+      "fromConnector": "SALIDA",
+      "to": 7,
+      "toConnector": "TRIG"
+    }
+  ]
+}

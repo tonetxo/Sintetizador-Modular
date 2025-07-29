@@ -27,10 +27,15 @@ export class Keyboard {
         pitchSource.start();
         pitchSource.connect(this.pitchCV);
         
+        // --- Gate signal as a real AudioNode ---
+        this.gateSignalNode = audioContext.createConstantSource();
+        this.gateSignalNode.offset.value = 0;
+        this.gateSignalNode.start();
+
         this.gateOutput = { connectedModules: [] };
         this.inputs = {}; 
         this.outputs = {
-            'DISPARO': { x: this.width / 2 - 60, y: this.height, type: 'gate', orientation: 'vertical' },
+            'DISPARO': { x: this.width / 2 - 60, y: this.height, type: 'gate', source: this.gateSignalNode, orientation: 'vertical' },
             'TENSION': { x: this.width / 2 + 60, y: this.height, type: 'cv', source: this.pitchCV, orientation: 'vertical' }
         };
         
@@ -44,10 +49,14 @@ export class Keyboard {
             this.lastNote = KEY_TO_MIDI[key];
             const freq = midiToFreq(this.lastNote);
             this.pitchCV.gain.setTargetAtTime(freq, audioContext.currentTime, 0.01);
+            
             if (this.activeKeys.size === 1) {
+                // Send event-based gate for ADSR
                 this.gateOutput.connectedModules.forEach(module => {
                     if (module.trigger) module.trigger();
                 });
+                // Send signal-based gate for LFO, etc.
+                this.gateSignalNode.offset.setTargetAtTime(1, audioContext.currentTime, 0.01);
             }
         }
     }
@@ -56,9 +65,12 @@ export class Keyboard {
         if (this.activeKeys.has(key)) {
             this.activeKeys.delete(key);
             if (this.activeKeys.size === 0) {
+                // Send event-based gate for ADSR
                 this.gateOutput.connectedModules.forEach(module => {
                      if (module.gateOff) module.gateOff();
                 });
+                // Send signal-based gate for LFO, etc.
+                this.gateSignalNode.offset.setTargetAtTime(0, audioContext.currentTime, 0.01);
             }
         }
     }
