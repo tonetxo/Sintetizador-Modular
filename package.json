@@ -1,0 +1,15 @@
+{
+  "name": "modular-synth-electron",
+  "version": "1.0.0",
+  "description": "A modular synthesizer based on classic diagrams.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "AI Assistant",
+  "license": "MIT",
+  "devDependencies": {
+    "@electron/remote": "^2.0.1",
+    "electron": "^28.0.0"
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "modules": [
+    {
+      "type": "Keyboard",
+      "x": 675,
+      "y": 722,
+      "isPermanent": true
+    },
+    {
+      "type": "Output",
+      "x": 750,
+      "y": 50,
+      "isPermanent": true
+    },
+    {
+      "type": "VCO",
+      "x": 515,
+      "y": 343,
+      "waveform": "sine"
+    },
+    {
+      "type": "VCF",
+      "x": 491,
+      "y": 104,
+      "cutoff": 1000,
+      "q": 1
+    },
+    {
+      "type": "VCA",
+      "x": 679,
+      "y": 245
+    },
+    {
+      "type": "ADSR",
+      "x": 607,
+      "y": 534,
+      "params": {
+        "attack": 0.05,
+        "decay": 0.1,
+        "sustain": 0.6,
+        "release": 0.5
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": 2,
+      "fromConnector": "audio",
+      "to": 3,
+      "toConnector": "audio"
+    },
+    {
+      "from": 3,
+      "fromConnector": "audio",
+      "to": 4,
+      "toConnector": "audio"
+    },
+    {
+      "from": 0,
+      "fromConnector": "TENSION",
+      "to": 2,
+      "toConnector": "1V/Oct"
+    },
+    {
+      "from": 0,
+      "fromConnector": "DISPARO",
+      "to": 5,
+      "toConnector": "Disparo"
+    },
+    {
+      "from": 5,
+      "fromConnector": "C.V.",
+      "to": 4,
+      "toConnector": "CV 1"
+    },
+    {
+      "from": 4,
+      "fromConnector": "audio",
+      "to": 1,
+      "toConnector": "audio"
+    }
+  ]
+}

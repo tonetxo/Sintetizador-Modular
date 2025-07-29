@@ -1,0 +1,106 @@
+{
+  "modules": [
+    {
+      "type": "Keyboard",
+      "x": 651.3636363636364,
+      "y": 672.2727272727273,
+      "isPermanent": true
+    },
+    {
+      "type": "Output",
+      "x": 1136,
+      "y": 309.1818181818182,
+      "isPermanent": true
+    },
+    {
+      "type": "VCO",
+      "x": 355.4545454545455,
+      "y": 238.90909090909088,
+      "waveform": "sawtooth"
+    },
+    {
+      "type": "ADSR",
+      "x": 673.7988295992272,
+      "y": 431.31306576003266,
+      "params": {
+        "attack": 0.16400000000000003,
+        "decay": 0.135,
+        "sustain": 0.3099999999999997,
+        "release": 0.21000000000000002
+      }
+    },
+    {
+      "type": "VCF",
+      "x": 635.1453456791057,
+      "y": 188.89200830880227,
+      "cutoff": 313.13104248046875,
+      "q": 11.877944946289062
+    },
+    {
+      "type": "VCA",
+      "x": 881.6537312162959,
+      "y": 240.14887153194283
+    },
+    {
+      "type": "ADSR",
+      "x": 339.9568583864741,
+      "y": 472.88495569726354,
+      "params": {
+        "attack": 0.26500000000000007,
+        "decay": 0.030000000000000047,
+        "sustain": 0.9500000000000003,
+        "release": 0.0649999999999997
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": 0,
+      "fromConnector": "DISPARO",
+      "to": 3,
+      "toConnector": "Disparo"
+    },
+    {
+      "from": 0,
+      "fromConnector": "TENSION",
+      "to": 2,
+      "toConnector": "C.V."
+    },
+    {
+      "from": 5,
+      "fromConnector": "audio",
+      "to": 1,
+      "toConnector": "audio"
+    },
+    {
+      "from": 3,
+      "fromConnector": "C.V.",
+      "to": 5,
+      "toConnector": "control"
+    },
+    {
+      "from": 2,
+      "fromConnector": "audio",
+      "to": 4,
+      "toConnector": "audio"
+    },
+    {
+      "from": 4,
+      "fromConnector": "audio",
+      "to": 5,
+      "toConnector": "audio"
+    },
+    {
+      "from": 0,
+      "fromConnector": "DISPARO",
+      "to": 6,
+      "toConnector": "Disparo"
+    },
+    {
+      "from": 6,
+      "fromConnector": "C.V.",
+      "to": 4,
+      "toConnector": "C.V."
+    }
+  ]
+}

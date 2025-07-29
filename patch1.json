@@ -1,0 +1,71 @@
+{
+  "modules": [
+    {
+      "type": "VCO",
+      "x": 292,
+      "y": 253,
+      "waveform": "sawtooth"
+    },
+    {
+      "type": "ADSR",
+      "x": 598.5426312521198,
+      "y": 427.86678476829707,
+      "params": {
+        "attack": 0.01,
+        "decay": 0.135,
+        "sustain": 0.3099999999999997,
+        "release": 0.21000000000000002
+      }
+    },
+    {
+      "type": "VCF",
+      "x": 714.5710865881967,
+      "y": 158.56209467243872,
+      "cutoff": 350,
+      "q": 1
+    },
+    {
+      "type": "VCA",
+      "x": 959.1991857617504,
+      "y": 344.5125078955791
+    }
+  ],
+  "connections": [
+    {
+      "from": 0,
+      "fromConnector": "TENSION",
+      "to": 2,
+      "toConnector": "C.V."
+    },
+    {
+      "from": 0,
+      "fromConnector": "DISPARO",
+      "to": 3,
+      "toConnector": "Disparo"
+    },
+    {
+      "from": 2,
+      "fromConnector": "audio",
+      "to": 4,
+      "toConnector": "audio"
+    },
+    {
+      "from": 4,
+      "fromConnector": "audio",
+      "to": 5,
+      "toConnector": "audio"
+    },
+    {
+      "from": 3,
+      "fromConnector": "C.V.",
+      "to": 5,
+      "toConnector": "control"
+    },
+    {
+      "from": 5,
+      "fromConnector": "audio",
+      "to": 1,
+      "toConnector": "audio"
+    }
+  ]
+}

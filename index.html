@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Sintetizador Modular</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="ui-container">
+        <button id="save-patch-btn">Guardar Patch</button>
+        <button id="load-patch-btn">Cargar Patch</button>
+    </div>
+    <canvas id="synth-canvas"></canvas>
+    
+    <!-- Menú contextual para AÑADIR módulos -->
+    <div id="context-menu" class="context-menu">
+        <div class="context-menu-item" data-module="VCO">Añadir VCO</div>
+        <div class="context-menu-item" data-module="LFO">Añadir LFO</div>
+        <div class="context-menu-item" data-module="Mixer">Añadir Mixer</div>
+        <div class="context-menu-item" data-module="VCF">Añadir VCF</div>
+        <div class="context-menu-item" data-module="ADSR">Añadir ADSR</div>
+        <div class="context-menu-item" data-module="VCA">Añadir VCA</div>
+        <div class="context-menu-item" data-module="RingMod">Añadir Mod. Anillo</div>
+        <div class="context-menu-item" data-module="SampleAndHold">Añadir S&H</div>
+    </div>
+
+    <!-- Menú contextual para CONECTAR cables -->
+    <div id="patch-context-menu" class="context-menu"></div>
+
+    <script src="renderer.js" type="module"></script>
+</body>
+</html>
