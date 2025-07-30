@@ -262,18 +262,17 @@ export class VCO {
     // Nuevo: handleDragInteraction para mover el slider de detune
     handleDragInteraction(worldPos) { // Ahora recibe el objeto worldPos completo
         if (this.isDraggingDetune) {
-            const sliderX = this.x + 10;
+            const sliderOffsetX = 10; // Offset local del slider dentro del módulo
             const sliderWidth = this.width - 20;
             
             // Calcula la posición relativa del clic dentro del slider
-            const relativeX = worldPos.x - (this.x + sliderX);
+            const relativeX = worldPos.x - (this.x + sliderOffsetX);
             
             // Convierte la posición relativa a un valor normalizado (0 a 1)
             const normalizedValue = Math.max(0, Math.min(1, relativeX / sliderWidth));
             
             // Mapea el valor normalizado al rango de detune (-50 a 50)
             const newDetune = (normalizedValue * 100) - 50;
-            
             this.setDetune(newDetune);
         }
     }
