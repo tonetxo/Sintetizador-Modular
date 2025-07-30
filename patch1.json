@@ -3,8 +3,8 @@
     {
       "id": "keyboard-main",
       "type": "Keyboard",
-      "x": 397.5,
-      "y": 725,
+      "x": 403.5,
+      "y": 780,
       "isPermanent": true
     },
     {
@@ -25,29 +25,42 @@
     {
       "id": "vcf-1753859663488",
       "type": "VCF",
-      "x": 356,
-      "y": 325,
-      "cutoff": 1000,
-      "resonance": 1,
+      "x": 358,
+      "y": 211,
+      "cutoff": 4477.4423828125,
+      "resonance": 18.538333892822266,
       "filterType": "lowpass"
     },
     {
       "id": "vca-1753859665792",
       "type": "VCA",
-      "x": 619,
-      "y": 367
+      "x": 611,
+      "y": 276
     },
     {
       "id": "adsr-1753859678938",
       "type": "ADSR",
-      "x": 419,
-      "y": 539,
-      "params": {
-        "attack": 0.1,
-        "decay": 0.2,
-        "sustain": 0.6,
-        "release": 0.5
-      }
+      "x": 395,
+      "y": 481,
+      "attack": 0.5785714285714285,
+      "decay": 0.6354285714285715,
+      "sustain": 0.7142857142857143,
+      "release": 1.5070000000000001
+    },
+    {
+      "id": "lfo-1753863436880",
+      "type": "LFO",
+      "x": 132,
+      "y": 565,
+      "rate": 8,
+      "depth": 3,
+      "waveform": "sine"
+    },
+    {
+      "id": "osc-1753863450960",
+      "type": "Osciloscopio",
+      "x": 816,
+      "y": 308
     }
   ],
   "connections": [
@@ -71,21 +84,39 @@
     },
     {
       "fromId": "keyboard-main",
-      "fromConnector": "DISPARO",
-      "toId": "adsr-1753859678938",
-      "toConnector": "Disparo"
-    },
-    {
-      "fromId": "adsr-1753859678938",
-      "fromConnector": "C.V.",
-      "toId": "vca-1753859665792",
-      "toConnector": "CV 1"
-    },
-    {
-      "fromId": "keyboard-main",
       "fromConnector": "TENSION",
       "toId": "vco-1753859657036",
       "toConnector": "1V/Oct"
+    },
+    {
+      "fromId": "lfo-1753863436880",
+      "fromConnector": "SALIDA",
+      "toId": "vco-1753859657036",
+      "toConnector": "FM"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "lfo-1753863436880",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "vca-1753859665792",
+      "fromConnector": "audio",
+      "toId": "osc-1753863450960",
+      "toConnector": "input"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "adsr-1753859678938",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "adsr-1753859678938",
+      "fromConnector": "CV",
+      "toId": "vca-1753859665792",
+      "toConnector": "CV 1"
     }
   ]
 }

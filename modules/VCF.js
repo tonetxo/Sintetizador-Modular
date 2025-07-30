@@ -6,8 +6,8 @@ export class VCF {
         this.id = id || `vcf-${Date.now()}`;
         this.x = x;
         this.y = y;
-        this.width = 160;
-        this.height = 180;
+        this.width = 180; // Máis ancho
+        this.height = 300; // Máis alto
         this.type = 'VCF';
 
         this.filter = audioContext.createBiquadFilter();
@@ -20,8 +20,8 @@ export class VCF {
 
         this.inputs = {
             'audio': { x: 0, y: this.height / 2, type: 'audio', target: this.filter, orientation: 'horizontal' },
-            'CV 1': { x: this.width / 2 - 30, y: this.height, type: 'cv', target: this.filter.frequency, orientation: 'vertical' },
-            'CV 2': { x: this.width / 2 + 30, y: this.height, type: 'cv', target: this.filter.frequency, orientation: 'vertical' }
+            'CV 1': { x: this.width / 2 - 40, y: this.height, type: 'cv', target: this.filter.frequency, orientation: 'vertical' },
+            'CV 2': { x: this.width / 2 + 40, y: this.height, type: 'cv', target: this.filter.frequency, orientation: 'vertical' }
         };
         this.outputs = {
             'audio': { x: this.width, y: this.height / 2, type: 'audio', source: this.filter, orientation: 'horizontal' }
@@ -43,11 +43,14 @@ export class VCF {
         ctx.textAlign = 'center';
         ctx.fillText('VCF', this.width / 2, 22);
 
-        // Dibujar deslizador de Cutoff
-        this.drawVerticalSlider(ctx, 'cutoff', 30, 50, 120, 20, 20000, this.filter.frequency.value, 'Hz', true);
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(`Cut: ${this.filter.frequency.value.toFixed(0)}Hz`, 10, 40);
+        ctx.textAlign = 'right';
+        ctx.fillText(`Q: ${this.filter.Q.value.toFixed(2)}`, this.width - 10, 40);
 
-        // Dibujar deslizador de Q
-        this.drawVerticalSlider(ctx, 'q', this.width - 30, 50, 120, 0, 30, this.filter.Q.value, '');
+        this.drawVerticalSlider(ctx, 'cutoff', 40, 40, 220, 20, 20000, this.filter.frequency.value, 'Hz', true);
+        this.drawVerticalSlider(ctx, 'q', this.width - 40, 40, 220, 0, 30, this.filter.Q.value, false);
 
         ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
@@ -61,7 +64,7 @@ export class VCF {
         ctx.fillStyle = '#E0E0E0';
         ctx.font = '10px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(paramName.toUpperCase(), x, y - 5);
+        ctx.fillText(paramName.toUpperCase(), x, y - 18);
 
         // Barra del slider
         ctx.strokeStyle = '#555';
@@ -102,7 +105,10 @@ export class VCF {
             x: x - knobRadius,
             y: y,
             width: knobRadius * 2,
-            height: height
+            height: height,
+            min: minVal,
+            max: maxVal,
+            isLog: isLogarithmic
         };
     }
 
@@ -157,10 +163,10 @@ export class VCF {
         return false;
     }
 
-    handleDragInteraction(worldY) {
+    handleDragInteraction(worldPos) {
         if (!this.activeControl) return;
 
-        const localY = worldY - this.y;
+        const localY = worldPos.y - this.y;
         const sliderRect = this.paramHotspots[this.activeControl];
         
         let normalizedValue = (sliderRect.y + sliderRect.height - localY) / sliderRect.height;
@@ -170,8 +176,8 @@ export class VCF {
         const rampTime = 0.02;
 
         if (this.activeControl === 'cutoff') {
-            const minFreq = 20;
-            const maxFreq = 20000;
+            const minFreq = sliderRect.min;
+            const maxFreq = sliderRect.max;
             const logMin = Math.log(minFreq);
             const logMax = Math.log(maxFreq);
             
@@ -183,8 +189,8 @@ export class VCF {
             this.filter.frequency.linearRampToValueAtTime(Math.max(minFreq, Math.min(maxFreq, newFreq)), now + rampTime);
 
         } else if (this.activeControl === 'q') {
-            const minQ = 0.1;
-            const maxQ = 30;
+            const minQ = sliderRect.min;
+            const maxQ = sliderRect.max;
             const newQ = minQ + normalizedValue * (maxQ - minQ);
 
             this.filter.Q.cancelScheduledValues(now);

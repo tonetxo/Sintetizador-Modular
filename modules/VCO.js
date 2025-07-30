@@ -78,8 +78,14 @@ export class VCO {
 
     // Método para establecer el valor del detune directamente (desde UI)
     setDetune(value) {
+        if (!isFinite(value)) return; // Guarda contra valores no finitos
         // Redondea a un decimal para mantenerlo limpio
-        this.detuneValue = Math.round(value * 10) / 10;
+        let detuneVal = Math.round(value * 10) / 10;
+        // Evitar -0 que puede causar problemas
+        if (Object.is(detuneVal, -0)) {
+            detuneVal = 0;
+        }
+        this.detuneValue = detuneVal;
         this.oscillator.detune.setValueAtTime(this.detuneValue, audioContext.currentTime);
     }
 
@@ -114,7 +120,7 @@ export class VCO {
         ctx.fillStyle = '#E0E0E0';
         ctx.font = '10px Arial';
         ctx.textAlign = 'left';
-        ctx.fillText('DETUNE', sliderX, detuneControlY - 5);
+        ctx.fillText('DETUNE', sliderX, detuneControlY - 18);
 
         // Dibujar barra del slider
         ctx.strokeStyle = '#555';
@@ -137,7 +143,7 @@ export class VCO {
 
         // Mostrar valor de Detune
         ctx.textAlign = 'right';
-        ctx.fillText(`${this.detuneValue.toFixed(1)}c`, sliderX + sliderWidth, detuneControlY - 5);
+        ctx.fillText(`${this.detuneValue.toFixed(1)}c`, sliderX + sliderWidth, detuneControlY - 18);
         // --- Fin del control de Detune Fino ---
 
         this.drawConnectors(ctx, hoveredConnectorInfo);
@@ -232,7 +238,7 @@ export class VCO {
 
     // Nuevo: checkInteraction para el slider de detune
     checkInteraction(worldPos) {
-        const detuneControlY = this.y + 120;
+        const detuneControlY = this.y + 115; // Coincidir con la Y del dibujo
         const sliderX = this.x + 10;
         const sliderWidth = this.width - 20;
         const knobRadius = 8;
@@ -254,13 +260,13 @@ export class VCO {
     }
 
     // Nuevo: handleDragInteraction para mover el slider de detune
-    handleDragInteraction(worldPos, view) { // Ahora recibe la posición del mundo
+    handleDragInteraction(worldPos) { // Ahora recibe el objeto worldPos completo
         if (this.isDraggingDetune) {
             const sliderX = this.x + 10;
             const sliderWidth = this.width - 20;
             
             // Calcula la posición relativa del clic dentro del slider
-            const relativeX = worldPos.x - sliderX;
+            const relativeX = worldPos.x - (this.x + sliderX);
             
             // Convierte la posición relativa a un valor normalizado (0 a 1)
             const normalizedValue = Math.max(0, Math.min(1, relativeX / sliderWidth));

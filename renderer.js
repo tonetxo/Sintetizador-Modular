@@ -468,7 +468,10 @@ function onMouseDown(e) {
                 interactingModule = moduleHit;
                 return;
             }
-            if (moduleHit.handleClick && moduleHit.handleClick(worldPos.x, worldPos.y)) { return; }
+            if (moduleHit.handleClick && moduleHit.handleClick(worldPos.x, worldPos.y)) {
+                console.log(`LFO handleClick called for module ${moduleHit.id}`);
+                return;
+            }
             draggingModule = moduleHit;
             dragOffset.x = worldPos.x - moduleHit.x;
             dragOffset.y = worldPos.y - moduleHit.y;
@@ -503,7 +506,7 @@ function onMouseMove(e) {
         draggingModule.x = newX;
         draggingModule.y = newY;
     } else if (interactingModule && interactingModule.handleDragInteraction) {
-        interactingModule.handleDragInteraction(worldPos.y);
+        interactingModule.handleDragInteraction(worldPos);
     } else if (isPanning) {
         view.x += e.movementX;
         view.y += e.movementY;

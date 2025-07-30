@@ -7,8 +7,8 @@ export class ADSR {
         this.id = id || `adsr-${Date.now()}`;
         this.x = x;
         this.y = y;
-        this.width = 200;
-        this.height = 220;
+        this.width = 400;
+        this.height = 300;
         this.type = 'ADSR';
 
         this.params = {
@@ -55,12 +55,12 @@ export class ADSR {
         ctx.fillText('ADSR', this.width / 2, 22);
 
         // Debuxar 4 sliders para A, D, S, R
-        const sliderHeight = 140;
-        const sliderY = 60;
-        this.drawVerticalSlider(ctx, 'attack', 30, sliderY, sliderHeight, 0.01, 2, this.params.attack);
-        this.drawVerticalSlider(ctx, 'decay', 70, sliderY, sliderHeight, 0.01, 2, this.params.decay);
-        this.drawVerticalSlider(ctx, 'sustain', 110, sliderY, sliderHeight, 0, 1, this.params.sustain);
-        this.drawVerticalSlider(ctx, 'release', 150, sliderY, sliderHeight, 0.01, 5, this.params.release);
+        const sliderHeight = 240;
+        const sliderY = 40;
+        this.drawVerticalSlider(ctx, 'attack', 60, sliderY, sliderHeight, 0.01, 2, this.params.attack);
+        this.drawVerticalSlider(ctx, 'decay', 140, sliderY, sliderHeight, 0.01, 2, this.params.decay);
+        this.drawVerticalSlider(ctx, 'sustain', 220, sliderY, sliderHeight, 0, 1, this.params.sustain);
+        this.drawVerticalSlider(ctx, 'release', 300, sliderY, sliderHeight, 0.01, 5, this.params.release);
 
         ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
@@ -147,10 +147,10 @@ export class ADSR {
         return false;
     }
 
-    handleDragInteraction(worldY) {
+    handleDragInteraction(worldPos) {
         if (!this.activeControl) return;
 
-        const localY = worldY - this.y;
+        const localY = worldPos.y - this.y;
         const sliderRect = this.paramHotspots[this.activeControl];
         
         let normalizedValue = (sliderRect.y + sliderRect.height - localY) / sliderRect.height;

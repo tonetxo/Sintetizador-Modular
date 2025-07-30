@@ -3,57 +3,64 @@
     {
       "id": "keyboard-main",
       "type": "Keyboard",
-      "x": 397.5,
-      "y": 725,
+      "x": 231.80099999999993,
+      "y": 838.564,
       "isPermanent": true
     },
     {
       "id": "output-main",
       "type": "Output",
-      "x": 472.5,
-      "y": 50,
+      "x": 831.5419999999999,
+      "y": 289.699,
       "isPermanent": true
     },
     {
       "id": "vco-1753859657036",
       "type": "VCO",
-      "x": 141,
-      "y": 223,
-      "waveform": "sawtooth",
-      "detuneValue": -4.3
+      "x": -38.516225754574684,
+      "y": 172.49843673743095,
+      "waveform": "square",
+      "detuneValue": null
     },
     {
       "id": "vcf-1753859663488",
       "type": "VCF",
-      "x": 343,
-      "y": 358,
-      "cutoff": 424.4102783203125,
-      "resonance": 6.306946754455566,
+      "x": 220.19600000000003,
+      "y": 89.75299999999999,
+      "cutoff": 337.5224914550781,
+      "resonance": 6.545454502105713,
       "filterType": "lowpass"
     },
     {
       "id": "vca-1753859665792",
       "type": "VCA",
-      "x": 619,
-      "y": 367
+      "x": 531.14,
+      "y": 165.527
     },
     {
       "id": "adsr-1753859678938",
       "type": "ADSR",
-      "x": 419,
-      "y": 539,
-      "params": {
-        "attack": 0.1,
-        "decay": 0.5642975206611567,
-        "sustain": 0.6472865976998214,
-        "release": 0.8269120961682946
-      }
+      "x": 418.95799999999997,
+      "y": 483.66200000000003,
+      "attack": 1.590847708333333,
+      "decay": 0.6354285714285715,
+      "sustain": 0.7142857142857143,
+      "release": 1.5070000000000001
     },
     {
-      "id": "osc-1753862468523",
+      "id": "lfo-1753863436880",
+      "type": "LFO",
+      "x": -82.29100000000003,
+      "y": 578.3100000000001,
+      "rate": 8,
+      "depth": 36.4404182434082,
+      "waveform": "sine"
+    },
+    {
+      "id": "osc-1753863450960",
       "type": "Osciloscopio",
-      "x": 688.5774210120085,
-      "y": 156.3765704626906
+      "x": 774.7389999999999,
+      "y": 47.12399999999997
     }
   ],
   "connections": [
@@ -77,27 +84,45 @@
     },
     {
       "fromId": "keyboard-main",
-      "fromConnector": "DISPARO",
-      "toId": "adsr-1753859678938",
-      "toConnector": "Disparo"
-    },
-    {
-      "fromId": "adsr-1753859678938",
-      "fromConnector": "C.V.",
-      "toId": "vca-1753859665792",
-      "toConnector": "CV 1"
-    },
-    {
-      "fromId": "keyboard-main",
       "fromConnector": "TENSION",
       "toId": "vco-1753859657036",
       "toConnector": "1V/Oct"
     },
     {
+      "fromId": "lfo-1753863436880",
+      "fromConnector": "SALIDA",
+      "toId": "vco-1753859657036",
+      "toConnector": "FM"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "lfo-1753863436880",
+      "toConnector": "Gate"
+    },
+    {
       "fromId": "vca-1753859665792",
       "fromConnector": "audio",
-      "toId": "osc-1753862468523",
+      "toId": "osc-1753863450960",
       "toConnector": "input"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "adsr-1753859678938",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "adsr-1753859678938",
+      "fromConnector": "CV",
+      "toId": "vca-1753859665792",
+      "toConnector": "CV 1"
+    },
+    {
+      "fromId": "adsr-1753859678938",
+      "fromConnector": "CV",
+      "toId": "vco-1753859657036",
+      "toConnector": "DETUNE_CV"
     }
   ]
 }

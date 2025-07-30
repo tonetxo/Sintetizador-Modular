@@ -46,13 +46,13 @@ export class LFO {
         
         this.activeControl = null;
         this.paramHotspots = {};
-        this.waveforms = ['sine', 'square', 'sawtooth', 'triangle', 'noise'];
+        this.waveforms = ['sine', 'square', 'sawtooth', 'triangle', 'pulse', 'noise'];
         this.currentWaveformIndex = 0;
         this.oscillator.type = 'sine';
 
         this.inputs = {
-            'Rate CV': { x: this.width / 2, y: 0, type: 'cv', target: this.oscillator.frequency, orientation: 'vertical' },
-            'Gate': { x: this.width / 2, y: this.height, type: 'gate', target: this.gateGain.gain, orientation: 'vertical' }
+            'Rate CV': { x: this.width / 2 - 40, y: this.height, type: 'cv', target: this.oscillator.frequency, orientation: 'vertical' },
+            'Gate': { x: this.width / 2 + 40, y: this.height, type: 'gate', target: this.gateGain.gain, orientation: 'vertical' }
         };
         this.outputs = {
             'SALIDA': { x: this.width, y: this.height / 2, type: 'cv', source: this.outputScaler, orientation: 'horizontal' }
@@ -91,9 +91,9 @@ export class LFO {
 
         // Debuxar selector de forma de onda
         ctx.beginPath();
-        ctx.arc(this.width / 2, 200, 15, 0, Math.PI * 2);
+        ctx.arc(this.width / 2, this.height / 2, 15, 0, Math.PI * 2);
         ctx.stroke();
-        this.drawWaveform(ctx, this.width / 2, 200, 12);
+        this.drawWaveform(ctx, this.width / 2, this.height / 2, 12);
 
         ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
@@ -140,29 +140,42 @@ export class LFO {
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         const type = this.waveforms[this.currentWaveformIndex];
-        if (type === 'sine') {
-             ctx.moveTo(cx - radius, cy);
-             ctx.quadraticCurveTo(cx - radius/2, cy - radius, cx, cy);
-             ctx.quadraticCurveTo(cx + radius/2, cy + radius, cx + radius, cy);
-        } else if (type === 'square') {
-            ctx.moveTo(cx - radius, cy + radius/2);
-            ctx.lineTo(cx - radius, cy - radius/2);
-            ctx.lineTo(cx, cy - radius/2);
-            ctx.lineTo(cx, cy + radius/2);
-            ctx.lineTo(cx + radius, cy + radius/2);
-        } else if (type === 'sawtooth') {
-            ctx.moveTo(cx - radius, cy + radius);
-            ctx.lineTo(cx + radius, cy - radius);
-        } else if (type === 'triangle') {
-            ctx.moveTo(cx - radius, cy);
-            ctx.lineTo(cx, cy - radius);
-            ctx.lineTo(cx, cy + radius);
-            ctx.lineTo(cx + radius, cy);
-        } else if (type === 'noise') {
-            for (let i = 0; i < radius * 2; i += 2) {
-                ctx.moveTo(cx - radius + i, cy - (Math.random() * radius));
-                ctx.lineTo(cx - radius + i + 1, cy + (Math.random() * radius));
-            }
+        switch (type) {
+            case 'sine':
+                ctx.moveTo(cx - radius, cy);
+                ctx.quadraticCurveTo(cx - radius / 2, cy - radius, cx, cy);
+                ctx.quadraticCurveTo(cx + radius / 2, cy + radius, cx + radius, cy);
+                break;
+            case 'square':
+                ctx.moveTo(cx - radius, cy + radius / 2);
+                ctx.lineTo(cx - radius, cy - radius / 2);
+                ctx.lineTo(cx, cy - radius / 2);
+                ctx.lineTo(cx, cy + radius / 2);
+                ctx.lineTo(cx + radius, cy + radius / 2);
+                break;
+            case 'sawtooth':
+                ctx.moveTo(cx - radius, cy + radius / 2);
+                ctx.lineTo(cx + radius, cy - radius / 2);
+                break;
+            case 'triangle':
+                ctx.moveTo(cx - radius, cy + radius / 2);
+                ctx.lineTo(cx, cy - radius / 2);
+                ctx.lineTo(cx + radius, cy + radius / 2);
+                ctx.lineTo(cx - radius, cy + radius / 2);
+                break;
+            case 'pulse':
+                ctx.moveTo(cx - radius, cy + radius / 2);
+                ctx.lineTo(cx - radius, cy - radius / 2);
+                ctx.lineTo(cx + radius / 2, cy - radius / 2);
+                ctx.lineTo(cx + radius / 2, cy + radius / 2);
+                ctx.lineTo(cx + radius, cy + radius / 2);
+                break;
+            case 'noise':
+                for (let i = 0; i < radius * 2; i += 2) {
+                    ctx.moveTo(cx - radius + i, cy - (Math.random() * radius));
+                    ctx.lineTo(cx - radius + i + 1, cy + (Math.random() * radius));
+                }
+                break;
         }
         ctx.stroke();
         ctx.restore();
@@ -201,11 +214,15 @@ export class LFO {
     }
 
     setWaveform(waveform) {
-        this.oscillator.disconnect(this.depth);
-        this.noise.disconnect(this.depth);
+        // Disconnect only if connected
+        try { this.oscillator.disconnect(this.depth); } catch (e) { /* ignore */ }
+        try { this.noise.disconnect(this.depth); } catch (e) { /* ignore */ }
 
         if (waveform === 'noise') {
             this.noise.connect(this.depth);
+        } else if (waveform === 'pulse') {
+            this.oscillator.type = 'square'; // Pulse is typically a square wave with variable pulse width
+            this.oscillator.connect(this.depth);
         } else {
             this.oscillator.type = waveform;
             this.oscillator.connect(this.depth);
@@ -216,14 +233,17 @@ export class LFO {
         }
     }
 
-    handleClick(pos) {
-        const localPos = { x: pos.x - this.x, y: pos.y - this.y };
+    handleClick(x, y) {
+        const localX = x - this.x;
+        const localY = y - this.y;
         const symbolX = this.width / 2;
-        const symbolY = 150;
-        const dist = Math.sqrt(Math.pow(localPos.x - symbolX, 2) + Math.pow(localPos.y - symbolY, 2));
+        const symbolY = this.height / 2; // Coincidir con la posición de dibujo
+        const dist = Math.sqrt(Math.pow(localX - symbolX, 2) + Math.pow(localY - symbolY, 2));
+        console.log(`LFO handleClick: localX=${localX}, localY=${localY}, symbolX=${symbolX}, symbolY=${symbolY}, dist=${dist}`);
         if (dist < 20) {
             const newIndex = (this.currentWaveformIndex + 1) % this.waveforms.length;
             this.setWaveform(this.waveforms[newIndex]);
+            console.log(`LFO: Waveform changed to ${this.waveforms[newIndex]}`);
             return true;
         }
         return false;
@@ -243,10 +263,10 @@ export class LFO {
         return false;
     }
 
-    handleDragInteraction(worldY) {
+    handleDragInteraction(worldPos) {
         if (!this.activeControl) return;
 
-        const localY = worldY - this.y;
+        const localY = worldPos.y - this.y;
         const sliderRect = this.paramHotspots[this.activeControl];
         
         let normalizedValue = (sliderRect.y + sliderRect.height - localY) / sliderRect.height;
