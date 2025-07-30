@@ -2,60 +2,72 @@
   "modules": [
     {
       "type": "Keyboard",
-      "x": 354.5,
-      "y": 438,
+      "x": 675,
+      "y": 725,
       "isPermanent": true
     },
     {
       "type": "Output",
-      "x": 1084.5,
-      "y": 305,
+      "x": 1046,
+      "y": 269,
       "isPermanent": true
     },
     {
       "type": "VCO",
-      "x": 90,
-      "y": 120,
+      "x": 293,
+      "y": 242,
       "waveform": "triangle"
     },
     {
       "type": "VCF",
-      "x": 607,
-      "y": 159,
+      "x": 489,
+      "y": 210,
       "cutoff": 1000,
       "q": 1
     },
     {
       "type": "VCA",
-      "x": 874,
-      "y": 166
+      "x": 732,
+      "y": 227
     },
     {
       "type": "ADSR",
-      "x": 764,
-      "y": 465,
+      "x": 588,
+      "y": 493,
       "params": {
-        "attack": 0.6233333333333333,
-        "decay": 0.013333333333333334,
-        "sustain": 0.5692307692307692,
-        "release": 0.4166666666666667
+        "attack": 0.05,
+        "decay": 0.1,
+        "sustain": 0.6,
+        "release": 0.5
       }
     },
     {
-      "type": "LFO",
-      "x": 88,
-      "y": 399,
-      "rate": 4.021782398223877,
-      "depth": 93.311279296875,
-      "waveform": "square"
+      "type": "SampleAndHold",
+      "x": 361,
+      "y": 542
     },
     {
-      "type": "SampleAndHold",
-      "x": 345,
-      "y": 210
+      "type": "LFO",
+      "x": 95,
+      "y": 663,
+      "rate": 25.271474838256836,
+      "depth": 1006.4938354492188,
+      "waveform": "triangle"
+    },
+    {
+      "type": "VCO",
+      "x": 102,
+      "y": 430,
+      "waveform": "sawtooth"
     }
   ],
   "connections": [
+    {
+      "from": 2,
+      "fromConnector": "audio",
+      "to": 3,
+      "toConnector": "audio"
+    },
     {
       "from": 3,
       "fromConnector": "audio",
@@ -89,19 +101,31 @@
     {
       "from": 0,
       "fromConnector": "DISPARO",
-      "to": 6,
+      "to": 7,
       "toConnector": "Gate"
     },
     {
-      "from": 2,
-      "fromConnector": "audio",
-      "to": 7,
-      "toConnector": "IN"
+      "from": 0,
+      "fromConnector": "TENSION",
+      "to": 8,
+      "toConnector": "1V/Oct"
     },
     {
       "from": 6,
+      "fromConnector": "OUT",
+      "to": 2,
+      "toConnector": "FM"
+    },
+    {
+      "from": 8,
+      "fromConnector": "audio",
+      "to": 6,
+      "toConnector": "IN"
+    },
+    {
+      "from": 7,
       "fromConnector": "SALIDA",
-      "to": 7,
+      "to": 6,
       "toConnector": "TRIG"
     }
   ]

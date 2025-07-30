@@ -2,7 +2,8 @@
 import { audioContext } from './AudioContext.js';
 
 export class VCA {
-    constructor(x, y) {
+    constructor(x, y, id = null, initialState = {}) {
+        this.id = id || `vca-${Date.now()}`;
         this.x = x;
         this.y = y;
         this.width = 110;
@@ -103,6 +104,12 @@ export class VCA {
         this.gainNode.disconnect();
     }
 
-    getState() { return { type: 'VCA', x: this.x, y: this.y }; }
+    getState() { return { id: this.id, type: 'VCA', x: this.x, y: this.y }; }
+
+    setState(state) {
+        this.id = state.id || this.id;
+        this.x = state.x;
+        this.y = state.y;
+    }
     setState(state) { this.x = state.x; this.y = state.y; }
 }

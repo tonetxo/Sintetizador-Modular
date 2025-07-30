@@ -2,7 +2,8 @@
 import { audioContext } from './AudioContext.js';
 
 export class Mixer {
-    constructor(x, y) {
+    constructor(x, y, id = null, initialState = {}) {
+        this.id = id || `mixer-${Date.now()}`;
         this.x = x;
         this.y = y;
         this.width = 120;
@@ -145,20 +146,22 @@ export class Mixer {
 
     getState() {
         return {
+            id: this.id,
             type: 'Mixer',
-            x: this.x,
-            y: this.y,
-            levels: this.channels.map(ch => ch.gain.value)
+            x: this.x, y: this.y,
+            levels: this.channelStrips.map(cs => cs.gain.gain.value)
         };
     }
 
     setState(state) {
-        this.x = state.x;
-        this.y = state.y;
-        state.levels.forEach((level, i) => {
-            if (this.channels[i]) {
-                this.channels[i].gain.value = level;
-            }
-        });
+        this.id = state.id || this.id;
+        this.x = state.x; this.y = state.y;
+        if (state.levels) {
+            state.levels.forEach((level, i) => {
+                if (this.channelStrips[i]) {
+                    this.channelStrips[i].gain.gain.value = level;
+                }
+            });
+        }
     }
 }

@@ -11,7 +11,8 @@ function midiToFreq(midi) {
 }
 
 export class Keyboard {
-    constructor(x, y) {
+    constructor(x, y, id = 'keyboard-main') { // Acepta un ID, con uno por defecto
+        this.id = id;
         this.x = x;
         this.y = y;
         this.width = 250;
@@ -138,5 +139,22 @@ export class Keyboard {
             if (dist < 9) return { name, type: 'output', props, module: this };
         }
         return null;
+    }
+
+    // Añadir getState para guardar la posición y el ID
+    getState() {
+        return {
+            id: this.id,
+            type: this.type,
+            x: this.x,
+            y: this.y,
+            isPermanent: this.isPermanent
+        };
+    }
+
+    // setState para restaurar la posición (aunque es permanente, puede ser útil)
+    setState(state) {
+        this.x = state.x;
+        this.y = state.y;
     }
 }

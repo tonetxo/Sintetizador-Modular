@@ -1,0 +1,37 @@
+node:electron/js2c/renderer_init:2 Electron Security Warning (Insecure Content-Security-Policy) This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+warnAboutInsecureCSP @ node:electron/js2c/renderer_init:2
+renderer.js:158 Target node is not ready: Object
+connectNodes @ renderer.js:158
+renderer.js:530 Connection could not be established
+onMouseUp @ renderer.js:530
+renderer.js:158 Target node is not ready: Object
+connectNodes @ renderer.js:158
+renderer.js:530 Connection could not be established
+onMouseUp @ renderer.js:530
+renderer.js:158 Target node is not ready: Object
+connectNodes @ renderer.js:158
+renderer.js:530 Connection could not be established
+onMouseUp @ renderer.js:530
+renderer.js:158 Target node is not ready: Object
+connectNodes @ renderer.js:158
+renderer.js:530 Connection could not be established
+onMouseUp @ renderer.js:530
+renderer.js:158 Target node is not ready: Object
+connectNodes @ renderer.js:158
+renderer.js:530 Connection could not be established
+onMouseUp @ renderer.js:530
+renderer.js:158 Target node is not ready: Object
+connectNodes @ renderer.js:158
+renderer.js:530 Connection could not be established
+onMouseUp @ renderer.js:530
+renderer.js:158 Target node is not ready: Object
+connectNodes @ renderer.js:158
+renderer.js:530 Connection could not be established
+onMouseUp @ renderer.js:530

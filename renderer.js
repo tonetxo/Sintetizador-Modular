@@ -9,6 +9,7 @@ import { Mixer } from './modules/Mixer.js';
 import { RingMod } from './modules/RingMod.js';
 import { SampleAndHold } from './modules/SampleAndHold.js';
 import { Keyboard } from './modules/Keyboard.js';
+import { Osciloscopio } from './modules/Osciloscopio.js'; // IMPORTAR LA CLASE OSCILOSCOPIO
 
 const { dialog } = require('@electron/remote');
 const fs = require('fs');
@@ -18,7 +19,8 @@ const ctx = canvas.getContext('2d');
 const contextMenu = document.getElementById('context-menu');
 const patchContextMenu = document.getElementById('patch-context-menu');
 
-const MODULE_CLASSES = { VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod, SampleAndHold };
+// AÑADIR Osciloscopio a la lista de clases de módulo
+const MODULE_CLASSES = { VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod, SampleAndHold, Osciloscopio };
 
 let modules = [];
 let connections = [];
@@ -46,12 +48,15 @@ function setup() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const keyboard = new Keyboard(canvas.width / 2 - 125, canvas.height - 150);
+    // Pasar un ID fijo al constructor del Teclado
+    const keyboard = new Keyboard(canvas.width / 2 - 125, canvas.height - 150, 'keyboard-main');
     modules.push(keyboard);
     
     const masterOutputNode = audioContext.destination;
     
+    // Módulo de Salida (permanente) con ID fijo
     const outputModule = {
+        id: 'output-main', // ID fijo para la salida
         x: canvas.width / 2 - 50, y: 50, width: 100, height: 80, isPermanent: true, type: 'Output',
         inputs: { 'audio': { x: 0, y: 40, type: 'audio', target: masterOutputNode, orientation: 'horizontal' } },
         outputs: {},
@@ -84,6 +89,14 @@ function setup() {
                 if (dist < 9) return { name, type: 'input', props, module: this };
             }
             return null;
+        },
+        getState: function() { // Método getState para la serialización del Output
+            return { id: this.id, type: this.type, x: this.x, y: this.y, isPermanent: this.isPermanent };
+        },
+        // Añadir setState para la consistencia
+        setState: function(state) {
+            this.x = state.x;
+            this.y = state.y;
         }
     };
     modules.push(outputModule);
@@ -138,6 +151,7 @@ function draw() {
         ctx.stroke();
     }
 
+    // AHORA CADA MÓDULO (incluido el Osciloscopio) DIBUJA SÍ MISMO
     modules.forEach(module => module.draw(ctx, module === selectedModule, hoveredConnectorInfo));
     ctx.restore();
     requestAnimationFrame(draw);
@@ -150,7 +164,10 @@ function connectNodes(sourceNode, destConnector) {
         return;
     }
 
-    if (target instanceof AudioWorkletNode) {
+    // Añadir caso específico para AnalyserNode (osciloscopio)
+    if (sourceNode && target instanceof AnalyserNode) {
+        sourceNode.connect(target);
+    } else if (target instanceof AudioWorkletNode) {
         sourceNode.connect(target, 0, destConnector.inputIndex);
     } else if (target instanceof AudioParam) {
         sourceNode.connect(target);
@@ -164,7 +181,10 @@ function disconnectNodes(sourceNode, destConnector) {
     if (!target) return;
 
     try {
-        if (target instanceof AudioWorkletNode) {
+        // Añadir caso específico para AnalyserNode
+        if (sourceNode && target instanceof AnalyserNode) {
+            sourceNode.disconnect(target);
+        } else if (target instanceof AudioWorkletNode) {
             sourceNode.disconnect(target, 0, destConnector.inputIndex);
         } else if (target instanceof AudioParam) {
             sourceNode.disconnect(target);
@@ -206,20 +226,36 @@ function deleteSelection() {
 
 function savePatch() {
     const patch = {
-        modules: modules.map(m => m.getState ? m.getState() : { type: m.type, x: m.x, y: m.y, isPermanent: m.isPermanent }),
-        connections: connections.map(c => ({
-            from: modules.indexOf(c.fromModule),
-            fromConnector: c.fromConnector.name,
-            to: modules.indexOf(c.toModule),
-            toConnector: c.toConnector.name,
-        }))
+        modules: modules.map(m => m.getState ? m.getState() : {}),
+        connections: connections.map(c => {
+            // Solución robusta: Volver a encontrar los módulos para asegurar que tenemos el objeto completo
+            const fromModule = getModuleAt(c.fromModule.x, c.fromModule.y);
+            const toModule = getModuleAt(c.toModule.x, c.toModule.y);
+
+            const fromId = fromModule ? fromModule.id : null;
+            const toId = toModule ? toModule.id : null;
+
+            if (!fromId || !toId) {
+                console.error('FATAL: No se pudo determinar el ID de un módulo al guardar la conexión.', c);
+                return null;
+            }
+
+            return {
+                fromId: fromId,
+                fromConnector: c.fromConnector.name,
+                toId: toId,
+                toConnector: c.toConnector.name,
+            };
+        }).filter(c => c !== null)
     };
+
     dialog.showSaveDialog({
         title: 'Guardar Patch', defaultPath: 'patch.json',
         filters: [{ name: 'JSON Files', extensions: ['json'] }]
     }).then(result => {
         if (!result.canceled && result.filePath) {
             fs.writeFileSync(result.filePath, JSON.stringify(patch, null, 2));
+            console.log('Patch guardado correctamente.');
         }
     });
 }
@@ -237,6 +273,7 @@ async function loadPatch() {
 }
 
 async function reconstructPatch(patchData) {
+    // Desconectar y eliminar todos los módulos no permanentes
     modules.filter(m => !m.isPermanent).forEach(m => m.disconnect && m.disconnect());
     const permanentModules = modules.filter(m => m.isPermanent);
     modules = [...permanentModules];
@@ -244,27 +281,47 @@ async function reconstructPatch(patchData) {
     selectedModule = null;
 
     const modulePromises = patchData.modules.map(async (moduleState) => {
-        if (moduleState.isPermanent || !moduleState.type) return null;
+        if (moduleState.isPermanent) {
+            // Encontrar el módulo permanente existente por su ID único
+            const existingModule = permanentModules.find(m => m.id === moduleState.id);
+            if (existingModule && existingModule.setState) {
+                existingModule.setState(moduleState);
+            }
+            return existingModule;
+        }
+        if (!moduleState.type) return null;
         const ModuleClass = MODULE_CLASSES[moduleState.type];
         if (ModuleClass) {
-            const newModule = new ModuleClass(moduleState.x, moduleState.y);
+            // Crear nueva instancia para módulos no permanentes
+            const newModule = new ModuleClass(moduleState.x, moduleState.y, moduleState.id, moduleState);
             if (newModule.readyPromise) await newModule.readyPromise;
-            if (newModule.setState) newModule.setState(moduleState);
             return newModule;
         }
         return null;
     });
 
+    // La nueva lista de módulos es directamente el resultado de las promesas
     const loadedModules = (await Promise.all(modulePromises)).filter(m => m !== null);
-    modules.push(...loadedModules);
+    modules = loadedModules;
+
+    const moduleMap = new Map(modules.map(m => [m.id, m]));
 
     patchData.connections.forEach(connData => {
-        const fromModule = modules[connData.from];
-        const toModule = modules[connData.to];
-        if (!fromModule || !toModule) return;
+        const fromModule = moduleMap.get(connData.fromId);
+        const toModule = moduleMap.get(connData.toId);
+
+        if (!fromModule || !toModule) {
+            console.warn('Módulo no encontrado para la conexión:', connData);
+            return;
+        }
+        
         const fromConnector = fromModule.outputs[connData.fromConnector];
         const toConnector = toModule.inputs[connData.toConnector];
-        if (!fromConnector || !toConnector) return;
+        
+        if (!fromConnector || !toConnector) {
+            console.warn('Conector no encontrado para la conexión:', connData);
+            return;
+        }
 
         if (fromConnector.type === 'gate') {
             if (fromModule.connectGate) fromModule.connectGate(toModule);
@@ -294,12 +351,12 @@ function setupEventListeners() {
     document.querySelectorAll('#context-menu .context-menu-item').forEach(item => {
         item.addEventListener('click', (e) => {
             const moduleType = e.target.getAttribute('data-module');
-            const worldPos = screenToWorld(contextMenu.style.left.slice(0,-2), contextMenu.style.top.slice(0,-2));
+            const worldPos = screenToWorld(parseFloat(contextMenu.style.left.slice(0,-2)), parseFloat(contextMenu.style.top.slice(0,-2))); // Parsear a número
             addModule(moduleType, worldPos.x, worldPos.y);
             contextMenu.style.display = 'none';
         });
     });
-    window.addEventListener('click', (e) => { 
+    window.addEventListener('click', (e) => {
         if (!patchContextMenu.contains(e.target)) {
             patchContextMenu.style.display = 'none';
         }
@@ -307,11 +364,17 @@ function setupEventListeners() {
             contextMenu.style.display = 'none';
         }
     });
+
+    window.addEventListener('resize', () => { // Añadir listener de redimensionamiento de ventana
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    });
 }
 
 function addModule(type, x, y) {
     const ModuleClass = MODULE_CLASSES[type];
     if (ModuleClass) {
+        // Pasa las coordenadas al constructor
         const newModule = new ModuleClass(x, y);
         modules.push(newModule);
         selectedModule = newModule;
@@ -337,10 +400,18 @@ function showPatchContextMenu(e) {
     modules.forEach(module => {
         if (module === patchStart.module) return;
         Object.entries(module.inputs).forEach(([name, props]) => {
+            // Modificar la compatibilidad para incluir osciloscopios
             const isCompatible = (outputType === props.type) || 
                                  (outputType === 'audio' && props.type === 'cv') ||
-                                 (outputType === 'cv' && props.type === 'gate');
-            if (isCompatible) {
+                                 (outputType === 'cv' && props.type === 'gate') ||
+                                 (outputType === 'gate' && props.type === 'gate');
+            
+            // Un osciloscopio solo tiene una entrada de audio/CV
+            if (module.type === 'Osciloscopio' && props.type === 'audio') {
+                 if (outputType === 'audio' || outputType === 'cv') { // Osciloscopio puede tomar audio o CV
+                     compatibleInputs.push({ module, connectorName: name, connectorProps: props });
+                 }
+            } else if (isCompatible) {
                 compatibleInputs.push({ module, connectorName: name, connectorProps: props });
             }
         });
@@ -443,7 +514,15 @@ function onMouseMove(e) {
         return;
     }
     if (interactingModule) {
-        interactingModule.handleDragInteraction(e.movementX, e.movementY, e.shiftKey);
+        const dx = (mousePos.x - lastMousePos.x) / view.zoom;
+        const dy = (mousePos.y - lastMousePos.y) / view.zoom;
+
+        if (interactingModule.type === 'ADSR' || interactingModule.type === 'VCF') {
+            interactingModule.handleDragInteraction(dx, dy);
+        } else {
+            interactingModule.handleDragInteraction(worldPos, view);
+        }
+        lastMousePos = mousePos; // Actualizar la última posición para el siguiente frame
         return;
     }
     if (draggingModule) {
@@ -469,8 +548,12 @@ function onMouseUp(e) {
                                  (outputType === 'audio' && inputType === 'cv') ||
                                  (outputType === 'cv' && inputType === 'gate') ||
                                  (outputType === 'gate' && inputType === 'gate');
+            
+            // Añadir compatibilidad para Osciloscopio
+            const isOscilloscopeInput = hit.module.type === 'Osciloscopio' && hit.connector.name === 'input';
+            const canConnectToOscilloscope = isOscilloscopeInput && (outputType === 'audio' || outputType === 'cv');
 
-            if (isCompatible) {
+            if (isCompatible || canConnectToOscilloscope) { // COMBINAR CONDICIONES DE COMPATIBILIDAD
                 // Conexión de señal (para LFO, VCA, etc.)
                 if (patchStart.connector.props.source && hit.connector.props.target) {
                     connectNodes(patchStart.connector.props.source, hit.connector.props);

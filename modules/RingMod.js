@@ -2,7 +2,8 @@
 import { audioContext } from './AudioContext.js';
 
 export class RingMod {
-    constructor(x, y) {
+    constructor(x, y, id = null, initialState = {}) {
+        this.id = id || `ringmod-${Date.now()}`;
         this.x = x;
         this.y = y;
         this.width = 120;
@@ -102,6 +103,12 @@ export class RingMod {
         this.multiplier.disconnect();
     }
 
-    getState() { return { type: 'RingMod', x: this.x, y: this.y }; }
+    getState() { return { id: this.id, type: 'RingMod', x: this.x, y: this.y }; }
+
+    setState(state) {
+        this.id = state.id || this.id;
+        this.x = state.x;
+        this.y = state.y;
+    }
     setState(state) { this.x = state.x; this.y = state.y; }
 }

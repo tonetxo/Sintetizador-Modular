@@ -1,0 +1,24 @@
+node:electron/js2c/renderer_init:2 Electron Security Warning (Insecure Content-Security-Policy) This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+warnAboutInsecureCSP @ node:electron/js2c/renderer_init:2
+renderer.js:305 Conector no encontrado para la conexión: {fromConnector: 'TENSION', toId: 'vco-1753828292154', toConnector: '1V/Oct'}
+(anonymous) @ renderer.js:305
+reconstructPatch @ renderer.js:292
+await in reconstructPatch (async)
+loadPatch @ renderer.js:255
+renderer.js:305 Conector no encontrado para la conexión: {fromConnector: 'DISPARO', toConnector: 'Disparo'}
+(anonymous) @ renderer.js:305
+reconstructPatch @ renderer.js:292
+await in reconstructPatch (async)
+loadPatch @ renderer.js:255
+renderer.js:305 Conector no encontrado para la conexión: {fromConnector: 'C.V.', toConnector: 'CV 1'}
+(anonymous) @ renderer.js:305
+reconstructPatch @ renderer.js:292
+await in reconstructPatch (async)
+loadPatch @ renderer.js:255

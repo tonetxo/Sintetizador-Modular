@@ -2,7 +2,8 @@
 import { audioContext } from './AudioContext.js';
 
 export class ADSR {
-    constructor(x, y) {
+    constructor(x, y, id = null, initialState = {}) {
+        this.id = id || `adsr-${Date.now()}`;
         this.x = x;
         this.y = y;
         this.width = 180;
@@ -213,6 +214,7 @@ export class ADSR {
 
     getState() {
         return {
+            id: this.id, // Guardar ID
             type: 'ADSR',
             x: this.x, y: this.y,
             params: { ...this.params }
@@ -220,6 +222,7 @@ export class ADSR {
     }
 
     setState(state) {
+        this.id = state.id || this.id; // Cargar ID
         this.x = state.x; this.y = state.y;
         this.params = { ...state.params };
         this.updateControlPointsFromParams();

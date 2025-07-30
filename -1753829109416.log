@@ -1,0 +1,51 @@
+node:electron/js2c/renderer_init:2 Electron Security Warning (Insecure Content-Security-Policy) This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+warnAboutInsecureCSP @ node:electron/js2c/renderer_init:2
+renderer.js:297 Módulo no encontrado para la conexión: Object
+(anonymous) @ renderer.js:297
+renderer.js:297 Módulo no encontrado para la conexión: Object
+(anonymous) @ renderer.js:297
+renderer.js:297 Módulo no encontrado para la conexión: Object
+(anonymous) @ renderer.js:297
+renderer.js:297 Módulo no encontrado para la conexión: Object
+(anonymous) @ renderer.js:297
+renderer.js:297 Módulo no encontrado para la conexión: Object
+(anonymous) @ renderer.js:297
+renderer.js:297 Módulo no encontrado para la conexión: Object
+(anonymous) @ renderer.js:297
+renderer.js:297 Módulo no encontrado para la conexión: {fromId: 'vco-1753828292154', fromConnector: 'audio', toConnector: 'audio'}
+(anonymous) @ renderer.js:297
+reconstructPatch @ renderer.js:292
+await in reconstructPatch (async)
+loadPatch @ renderer.js:255
+renderer.js:297 Módulo no encontrado para la conexión: {fromConnector: 'audio', toConnector: 'audio'}
+(anonymous) @ renderer.js:297
+reconstructPatch @ renderer.js:292
+await in reconstructPatch (async)
+loadPatch @ renderer.js:255
+renderer.js:297 Módulo no encontrado para la conexión: {fromConnector: 'audio', toConnector: 'audio'}
+(anonymous) @ renderer.js:297
+reconstructPatch @ renderer.js:292
+await in reconstructPatch (async)
+loadPatch @ renderer.js:255
+renderer.js:297 Módulo no encontrado para la conexión: {fromId: 'keyboard-main', fromConnector: 'DISPARO', toConnector: 'Disparo'}
+(anonymous) @ renderer.js:297
+reconstructPatch @ renderer.js:292
+await in reconstructPatch (async)
+loadPatch @ renderer.js:255
+renderer.js:297 Módulo no encontrado para la conexión: {fromConnector: 'C.V.', toConnector: 'CV 1'}
+(anonymous) @ renderer.js:297
+reconstructPatch @ renderer.js:292
+await in reconstructPatch (async)
+loadPatch @ renderer.js:255
+renderer.js:297 Módulo no encontrado para la conexión: {fromConnector: 'audio', toId: 'output-main', toConnector: 'audio'}
+(anonymous) @ renderer.js:297
+reconstructPatch @ renderer.js:292
+await in reconstructPatch (async)
+loadPatch @ renderer.js:255

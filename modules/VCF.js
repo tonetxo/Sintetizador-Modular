@@ -2,7 +2,8 @@
 import { audioContext } from './AudioContext.js';
 
 export class VCF {
-    constructor(x, y) {
+    constructor(x, y, id = null, initialState = {}) {
+        this.id = id || `vcf-${Date.now()}`;
         this.x = x;
         this.y = y;
         this.width = 130;
@@ -164,18 +165,24 @@ export class VCF {
 
     getState() {
         return {
+            id: this.id,
             type: 'VCF',
-            x: this.x,
-            y: this.y,
+            x: this.x, y: this.y,
             cutoff: this.filter.frequency.value,
-            q: this.filter.Q.value
+            resonance: this.filter.Q.value,
+            filterType: this.filter.type
         };
     }
 
     setState(state) {
-        this.x = state.x;
-        this.y = state.y;
-        this.filter.frequency.setValueAtTime(state.cutoff, audioContext.currentTime);
-        this.filter.Q.setValueAtTime(state.q, audioContext.currentTime);
+        this.id = state.id || this.id;
+        this.x = state.x; this.y = state.y;
+        this.filter.frequency.value = state.cutoff;
+        this.filter.Q.value = state.resonance;
+        this.filter.type = state.filterType;
+        this.cutoffKnob.value = state.cutoff;
+        this.resKnob.value = state.resonance;
+        const typeIndex = this.filterTypes.indexOf(state.filterType);
+        this.currentFilterTypeIndex = typeIndex !== -1 ? typeIndex : 0;
     }
 }

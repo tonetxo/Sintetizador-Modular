@@ -2,7 +2,8 @@
 import { audioContext } from './AudioContext.js';
 
 export class LFO {
-    constructor(x, y) {
+    constructor(x, y, id = null, initialState = {}) {
+        this.id = id || `lfo-${Date.now()}`;
         this.x = x;
         this.y = y;
         this.width = 120;
@@ -210,22 +211,21 @@ export class LFO {
 
     getState() {
         return {
+            id: this.id,
             type: 'LFO',
-            x: this.x,
-            y: this.y,
-            rate: this.oscillator.frequency.value,
-            depth: this.depth.gain.value,
+            x: this.x, y: this.y,
+            rate: this.rateKnob.value,
             waveform: this.waveforms[this.currentWaveformIndex]
         };
     }
 
     setState(state) {
-        this.x = state.x;
-        this.y = state.y;
-        this.oscillator.frequency.setValueAtTime(state.rate, audioContext.currentTime);
-        this.depth.gain.setValueAtTime(state.depth, audioContext.currentTime);
+        this.id = state.id || this.id;
+        this.x = state.x; this.y = state.y;
+        this.rateKnob.value = state.rate;
+        this.lfo.frequency.setValueAtTime(state.rate, audioContext.currentTime);
         const wfIndex = this.waveforms.indexOf(state.waveform);
         this.currentWaveformIndex = (wfIndex !== -1) ? wfIndex : 0;
-        this.oscillator.type = this.waveforms[this.currentWaveformIndex];
+        this.lfo.type = this.waveforms[this.currentWaveformIndex];
     }
 }
