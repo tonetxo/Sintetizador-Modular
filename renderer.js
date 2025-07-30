@@ -197,10 +197,9 @@ function disconnectNodes(sourceNode, destConnector) {
 function deleteSelection() {
     if (selectedConnection) {
         const conn = selectedConnection;
-        if (conn.fromConnector.props.type !== 'gate') {
+        // Para todo tipo de conexión, desconectar o nodo de audio se existe
+        if (conn.fromConnector.props.source && conn.toConnector.props.target) {
             disconnectNodes(conn.fromConnector.props.source, conn.toConnector.props);
-        } else {
-            if(conn.fromModule.disconnectGate) conn.fromModule.disconnectGate(conn.toModule);
         }
         const index = connections.indexOf(conn);
         if (index > -1) connections.splice(index, 1);
@@ -209,12 +208,8 @@ function deleteSelection() {
         if (selectedModule.disconnect) { selectedModule.disconnect(); }
         connections = connections.filter(conn => {
             const shouldRemove = conn.fromModule === selectedModule || conn.toModule === selectedModule;
-            if (shouldRemove) {
-                if (conn.fromConnector.props.type !== 'gate') {
-                     disconnectNodes(conn.fromConnector.props.source, conn.toConnector.props);
-                } else {
-                    if(conn.fromModule.disconnectGate) conn.fromModule.disconnectGate(conn.toModule);
-                }
+            if (shouldRemove && conn.fromConnector.props.source && conn.toConnector.props.target) {
+                 disconnectNodes(conn.fromConnector.props.source, conn.toConnector.props);
             }
             return !shouldRemove;
         });
@@ -319,11 +314,11 @@ async function reconstructPatch(patchData) {
             return;
         }
 
-        if (fromConnector.type === 'gate') {
-            if (fromModule.connectGate) fromModule.connectGate(toModule);
-        } else {
+        // Lóxica de conexión unificada
+        if (fromConnector.source && toConnector.target) {
             connectNodes(fromConnector.source, toConnector);
         }
+
         connections.push({
             fromModule, toModule,
             fromConnector: { name: connData.fromConnector, props: fromConnector },
@@ -502,28 +497,16 @@ function onMouseMove(e) {
     hoveredConnectorInfo = hit;
     canvas.style.cursor = hit ? 'pointer' : (isPanning || canvas.classList.contains('grabbing') ? 'grabbing' : 'grab');
 
-    if (isPanning) {
-        const dx = mousePos.x - lastMousePos.x;
-        const dy = mousePos.y - lastMousePos.y;
-        view.x += dx; view.y += dy;
-        lastMousePos = mousePos;
-        return;
-    }
-    if (interactingModule) {
-        const dx = (mousePos.x - lastMousePos.x) / view.zoom;
-        const dy = (mousePos.y - lastMousePos.y) / view.zoom;
-
-        if (interactingModule.type === 'ADSR' || interactingModule.type === 'VCF' || interactingModule.type === 'LFO') {
-            interactingModule.handleDragInteraction(dx, dy);
-        } else {
-            interactingModule.handleDragInteraction(worldPos, view);
-        }
-        lastMousePos = mousePos; // Actualizar la última posición para el siguiente frame
-        return;
-    }
     if (draggingModule) {
-        draggingModule.x = worldPos.x - dragOffset.x;
-        draggingModule.y = worldPos.y - dragOffset.y;
+        const newX = worldPos.x - dragOffset.x;
+        const newY = worldPos.y - dragOffset.y;
+        draggingModule.x = newX;
+        draggingModule.y = newY;
+    } else if (interactingModule && interactingModule.handleDragInteraction) {
+        interactingModule.handleDragInteraction(worldPos.y);
+    } else if (isPanning) {
+        view.x += e.movementX;
+        view.y += e.movementY;
     }
 }
 
@@ -545,18 +528,13 @@ function onMouseUp(e) {
                                  (outputType === 'cv' && inputType === 'gate') ||
                                  (outputType === 'gate' && inputType === 'gate');
             
-            // Añadir compatibilidad para Osciloscopio
             const isOscilloscopeInput = hit.module.type === 'Osciloscopio' && hit.connector.name === 'input';
             const canConnectToOscilloscope = isOscilloscopeInput && (outputType === 'audio' || outputType === 'cv');
 
-            if (isCompatible || canConnectToOscilloscope) { // COMBINAR CONDICIONES DE COMPATIBILIDAD
-                // Conexión de señal (para LFO, VCA, etc.)
+            if (isCompatible || canConnectToOscilloscope) {
+                // Lóxica de conexión de nodos de audio unificada
                 if (patchStart.connector.props.source && hit.connector.props.target) {
                     connectNodes(patchStart.connector.props.source, hit.connector.props);
-                }
-                // Conexión de evento (para el ADSR)
-                if (patchStart.connector.props.type === 'gate' && patchStart.module.connectGate) {
-                    patchStart.module.connectGate(hit.module);
                 }
 
                 connections.push({
@@ -583,14 +561,45 @@ function onContextMenu(e) {
 function onKeyDown(e) {
     if (e.target.tagName === 'INPUT') return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelection(); }
+    
     const keyboardModule = modules.find(m => m instanceof Keyboard);
-    if (keyboardModule && !interactingModule) { keyboardModule.handleKeyDown(e.key.toLowerCase()); }
+    if (keyboardModule && !interactingModule) {
+        const isNewPress = keyboardModule.activeKeys.size === 0;
+        keyboardModule.handleKeyDown(e.key.toLowerCase());
+        
+        // Se é a primeira tecla que se pulsa, disparar o gate ON
+        if (isNewPress && keyboardModule.activeKeys.size === 1) {
+            const now = audioContext.currentTime;
+            connections.forEach(conn => {
+                if (conn.fromModule === keyboardModule && conn.fromConnector.name === 'DISPARO') {
+                    if (conn.toModule.triggerOn) {
+                        conn.toModule.triggerOn(now);
+                    }
+                }
+            });
+        }
+    }
 }
 
 function onKeyUp(e) {
     if (e.target.tagName === 'INPUT') return;
     const keyboardModule = modules.find(m => m instanceof Keyboard);
-    if (keyboardModule) { keyboardModule.handleKeyUp(e.key.toLowerCase()); }
+    if (keyboardModule) {
+        const wasPressed = keyboardModule.activeKeys.size > 0;
+        keyboardModule.handleKeyUp(e.key.toLowerCase());
+
+        // Se non quedan teclas pulsadas, disparar o gate OFF
+        if (wasPressed && keyboardModule.activeKeys.size === 0) {
+            const now = audioContext.currentTime;
+            connections.forEach(conn => {
+                if (conn.fromModule === keyboardModule && conn.fromConnector.name === 'DISPARO') {
+                    if (conn.toModule.triggerOff) {
+                        conn.toModule.triggerOff(now);
+                    }
+                }
+            });
+        }
+    }
 } 
 
 function onWheel(e) {

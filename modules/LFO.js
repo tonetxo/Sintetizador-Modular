@@ -22,7 +22,7 @@ export class LFO {
         this.x = x;
         this.y = y;
         this.width = 160;
-        this.height = 180;
+        this.height = 220; // Máis alto
         this.type = 'LFO';
 
         this.oscillator = audioContext.createOscillator();
@@ -40,8 +40,6 @@ export class LFO {
         this.outputScaler.gain.value = 0.04;
 
         this.oscillator.connect(this.depth);
-        // Non conectamos o ruído por defecto
-        
         this.depth.connect(this.gateGain);
         this.gateGain.connect(this.outputScaler);
         this.oscillator.start();
@@ -76,36 +74,35 @@ export class LFO {
         ctx.textAlign = 'center';
         ctx.fillText('LFO', this.width / 2, 22);
 
-        // Dibujar deslizador de Rate
+        // Debuxar valores ao lado do título
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(`Rate: ${this.oscillator.frequency.value.toFixed(2)}Hz`, 10, 40);
+        ctx.textAlign = 'right';
+        ctx.fillText(`Depth: ${this.depth.gain.value.toFixed(2)}`, this.width - 10, 40);
+
+        // Debuxar deslizadores con máis percorrido
         const isNoise = this.waveforms[this.currentWaveformIndex] === 'noise';
         ctx.globalAlpha = isNoise ? 0.5 : 1.0;
-        this.drawVerticalSlider(ctx, 'rate', 30, 50, 120, 0.01, 20, this.oscillator.frequency.value, 'Hz');
+        this.drawVerticalSlider(ctx, 'rate', 30, 60, 120, 0.01, 20, this.oscillator.frequency.value, false);
         ctx.globalAlpha = 1.0;
+        
+        this.drawVerticalSlider(ctx, 'depth', this.width - 30, 60, 120, 0.01, 1000, this.depth.gain.value, true);
 
-        // Dibujar deslizador de Depth
-        this.drawVerticalSlider(ctx, 'depth', this.width - 30, 50, 120, 0.01, 1000, this.depth.gain.value, '', true);
-
-        // Dibujar selector de forma de onda
+        // Debuxar selector de forma de onda
         ctx.beginPath();
-        ctx.arc(this.width / 2, 150, 20, 0, Math.PI * 2); // Posición ajustada
+        ctx.arc(this.width / 2, 200, 15, 0, Math.PI * 2);
         ctx.stroke();
-        this.drawWaveform(ctx, this.width / 2, 150, 15); // Posición ajustada
+        this.drawWaveform(ctx, this.width / 2, 200, 12);
 
         ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
     }
 
-    drawVerticalSlider(ctx, paramName, x, y, height, minVal, maxVal, currentValue, unit, isLogarithmic = false) {
-        const sliderWidth = 10;
+    drawVerticalSlider(ctx, paramName, x, y, height, minVal, maxVal, currentValue, isLogarithmic) {
         const knobRadius = 8;
 
-        // Etiqueta
-        ctx.fillStyle = '#E0E0E0';
-        ctx.font = '10px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(paramName.toUpperCase(), x, y - 5);
-
-        // Barra del slider
+        // Barra
         ctx.strokeStyle = '#555';
         ctx.lineWidth = 4;
         ctx.beginPath();
@@ -113,7 +110,7 @@ export class LFO {
         ctx.lineTo(x, y + height);
         ctx.stroke();
 
-        // Pomo del slider
+        // Pomo
         let normalizedValue;
         if (isLogarithmic) {
             const logMin = Math.log(minVal);
@@ -123,11 +120,9 @@ export class LFO {
         } else {
             normalizedValue = (currentValue - minVal) / (maxVal - minVal);
         }
-
-        // ** A corrección clave: asegurar que o valor estea sempre entre 0 e 1 **
         normalizedValue = Math.max(0, Math.min(1, normalizedValue));
-
         const knobY = y + height - (normalizedValue * height);
+
         ctx.beginPath();
         ctx.arc(x, knobY, knobRadius, 0, Math.PI * 2);
         ctx.fillStyle = this.activeControl === paramName ? '#aaffff' : '#4a90e2';
@@ -136,16 +131,7 @@ export class LFO {
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Valor
-        ctx.fillText(`${currentValue.toFixed(1)}${unit}`, x, y + height + 15);
-
-        // Guardar hotspot para interacción
-        this.paramHotspots[paramName] = {
-            x: x - knobRadius,
-            y: y,
-            width: knobRadius * 2,
-            height: height
-        };
+        this.paramHotspots[paramName] = { x: x - knobRadius, y: y, width: knobRadius * 2, height: height };
     }
     
     drawWaveform(ctx, cx, cy, radius) {
@@ -245,55 +231,41 @@ export class LFO {
 
     checkInteraction(pos) {
         const localPos = { x: pos.x - this.x, y: pos.y - this.y };
+        // Comprobar interacción con los deslizadores
         for (const [param, rect] of Object.entries(this.paramHotspots)) {
             if (localPos.x >= rect.x && localPos.x <= rect.x + rect.width &&
                 localPos.y >= rect.y && localPos.y <= rect.y + rect.height) {
-                
-                const isNoise = this.waveforms[this.currentWaveformIndex] === 'noise';
-                if (param === 'rate' && isNoise) {
-                    return false; // Non permitir arrastrar 'rate' se é ruído
-                }
-                
                 this.activeControl = param;
                 return true;
             }
         }
-        
-        const symbolX = this.width / 2;
-        const symbolY = 150;
-        const dist = Math.sqrt(Math.pow(localPos.x - symbolX, 2) + Math.pow(localPos.y - symbolY, 2));
-        if (dist < 20) {
-            // A lóxica de cambio de onda xa está en handleClick,
-            // pero mantemos a detección aquí para o feedback visual se fose necesario.
-            return true; 
-        }
-
+        // A lóxica de click para a forma de onda xestiónase en `handleClick`
         return false;
     }
 
-    handleDragInteraction(dx, dy) {
+    handleDragInteraction(worldY) {
         if (!this.activeControl) return;
 
-        const sliderHeight = 120;
-        const sensitivity = dy * -1;
+        const localY = worldY - this.y;
+        const sliderRect = this.paramHotspots[this.activeControl];
+        
+        let normalizedValue = (sliderRect.y + sliderRect.height - localY) / sliderRect.height;
+        normalizedValue = Math.max(0, Math.min(1, normalizedValue));
 
         if (this.activeControl === 'rate') {
-            const minRate = 0.01;
-            const maxRate = 20;
-            const currentRate = this.oscillator.frequency.value;
-            const newRate = currentRate + (sensitivity / sliderHeight) * (maxRate - minRate);
-            this.oscillator.frequency.setValueAtTime(Math.max(minRate, Math.min(maxRate, newRate)), audioContext.currentTime);
+            const minRate = 0.01; // Hz
+            const maxRate = 20; // Hz
+            const newRate = minRate + normalizedValue * (maxRate - minRate);
+            this.oscillator.frequency.setValueAtTime(newRate, audioContext.currentTime);
         } else if (this.activeControl === 'depth') {
-            const minDepth = 0.01;
-            const maxDepth = 1000;
+            const minDepth = 0.01; // Valor mínimo para evitar log(0)
+            const maxDepth = 1000; // Valor máximo de profundidad
             const logMin = Math.log(minDepth);
             const logMax = Math.log(maxDepth);
-            const logCurrent = Math.log(this.depth.gain.value);
-
-            const logNew = logCurrent + (sensitivity / sliderHeight) * (logMax - logMin);
+            
+            const logNew = logMin + normalizedValue * (logMax - logMin);
             const newDepth = Math.exp(logNew);
-
-            this.depth.gain.setValueAtTime(Math.max(minDepth, Math.min(maxDepth, newDepth)), audioContext.currentTime);
+            this.depth.gain.setValueAtTime(newDepth, audioContext.currentTime);
         }
     }
 

@@ -52,12 +52,8 @@ export class Keyboard {
             this.pitchCV.gain.setTargetAtTime(freq, audioContext.currentTime, 0.01);
             
             if (this.activeKeys.size === 1) {
-                // Send event-based gate for ADSR
-                this.gateOutput.connectedModules.forEach(module => {
-                    if (module.trigger) module.trigger();
-                });
-                // Send signal-based gate for LFO, etc.
                 this.gateSignalNode.offset.setTargetAtTime(1, audioContext.currentTime, 0.01);
+                // A lóxica de disparo agora manéxase en renderer.js a través das conexións
             }
         }
     }
@@ -66,26 +62,9 @@ export class Keyboard {
         if (this.activeKeys.has(key)) {
             this.activeKeys.delete(key);
             if (this.activeKeys.size === 0) {
-                // Send event-based gate for ADSR
-                this.gateOutput.connectedModules.forEach(module => {
-                     if (module.gateOff) module.gateOff();
-                });
-                // Send signal-based gate for LFO, etc.
                 this.gateSignalNode.offset.setTargetAtTime(0, audioContext.currentTime, 0.01);
+                // A lóxica de disparo agora manéxase en renderer.js a través das conexións
             }
-        }
-    }
-    
-    connectGate(module) {
-        if (!this.gateOutput.connectedModules.includes(module)) {
-            this.gateOutput.connectedModules.push(module);
-        }
-    }
-    
-    disconnectGate(module) {
-        const index = this.gateOutput.connectedModules.indexOf(module);
-        if (index > -1) {
-            this.gateOutput.connectedModules.splice(index, 1);
         }
     }
 

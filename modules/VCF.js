@@ -157,22 +157,25 @@ export class VCF {
         return false;
     }
 
-    handleDragInteraction(dx, dy) {
+    handleDragInteraction(worldY) {
         if (!this.activeControl) return;
 
-        const sliderHeight = 120;
-        const sensitivity = dy * -1;
+        const localY = worldY - this.y;
+        const sliderRect = this.paramHotspots[this.activeControl];
+        
+        let normalizedValue = (sliderRect.y + sliderRect.height - localY) / sliderRect.height;
+        normalizedValue = Math.max(0, Math.min(1, normalizedValue));
+
         const now = audioContext.currentTime;
-        const rampTime = 0.02; // 20ms de rampa para suavizar
+        const rampTime = 0.02;
 
         if (this.activeControl === 'cutoff') {
             const minFreq = 20;
             const maxFreq = 20000;
             const logMin = Math.log(minFreq);
             const logMax = Math.log(maxFreq);
-            const logCurrent = Math.log(this.filter.frequency.value);
-
-            const logNew = logCurrent + (sensitivity / sliderHeight) * (logMax - logMin);
+            
+            const logNew = logMin + normalizedValue * (logMax - logMin);
             const newFreq = Math.exp(logNew);
             
             this.filter.frequency.cancelScheduledValues(now);
@@ -182,8 +185,7 @@ export class VCF {
         } else if (this.activeControl === 'q') {
             const minQ = 0.1;
             const maxQ = 30;
-            const currentQ = this.filter.Q.value;
-            const newQ = currentQ + (sensitivity / sliderHeight) * (maxQ - minQ);
+            const newQ = minQ + normalizedValue * (maxQ - minQ);
 
             this.filter.Q.cancelScheduledValues(now);
             this.filter.Q.setValueAtTime(this.filter.Q.value, now);
