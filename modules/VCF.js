@@ -44,7 +44,7 @@ export class VCF {
         ctx.fillText('VCF', this.width / 2, 22);
 
         // Dibujar deslizador de Cutoff
-        this.drawVerticalSlider(ctx, 'cutoff', 30, 50, 120, 20, 20000, this.filter.frequency.value, 'Hz');
+        this.drawVerticalSlider(ctx, 'cutoff', 30, 50, 120, 20, 20000, this.filter.frequency.value, 'Hz', true);
 
         // Dibujar deslizador de Q
         this.drawVerticalSlider(ctx, 'q', this.width - 30, 50, 120, 0, 30, this.filter.Q.value, '');
@@ -53,7 +53,7 @@ export class VCF {
         this.drawConnectors(ctx, hoveredConnectorInfo);
     }
 
-    drawVerticalSlider(ctx, paramName, x, y, height, minVal, maxVal, currentValue, unit) {
+    drawVerticalSlider(ctx, paramName, x, y, height, minVal, maxVal, currentValue, unit, isLogarithmic = false) {
         const sliderWidth = 10;
         const knobRadius = 8;
 
@@ -72,7 +72,19 @@ export class VCF {
         ctx.stroke();
 
         // Pomo del slider
-        const normalizedValue = (currentValue - minVal) / (maxVal - minVal);
+        let normalizedValue;
+        if (isLogarithmic) {
+            const logMin = Math.log(minVal);
+            const logMax = Math.log(maxVal);
+            const logCurrent = Math.log(currentValue);
+            normalizedValue = (logCurrent - logMin) / (logMax - logMin);
+        } else {
+            normalizedValue = (currentValue - minVal) / (maxVal - minVal);
+        }
+        
+        // ** A corrección clave: asegurar que o valor estea sempre entre 0 e 1 **
+        normalizedValue = Math.max(0, Math.min(1, normalizedValue));
+
         const knobY = y + height - (normalizedValue * height);
         ctx.beginPath();
         ctx.arc(x, knobY, knobRadius, 0, Math.PI * 2);
@@ -148,21 +160,34 @@ export class VCF {
     handleDragInteraction(dx, dy) {
         if (!this.activeControl) return;
 
-        const sliderHeight = 120; // Altura del deslizador
-        const sensitivity = dy * -1; // Invertir dy para que arrastrar hacia arriba aumente el valor
+        const sliderHeight = 120;
+        const sensitivity = dy * -1;
+        const now = audioContext.currentTime;
+        const rampTime = 0.02; // 20ms de rampa para suavizar
 
         if (this.activeControl === 'cutoff') {
-            const minFreq = 20; // Hz
-            const maxFreq = 20000; // Hz
-            const currentFreq = this.filter.frequency.value;
-            const newFreq = currentFreq + (sensitivity / sliderHeight) * (maxFreq - minFreq);
-            this.filter.frequency.setValueAtTime(Math.max(minFreq, Math.min(maxFreq, newFreq)), audioContext.currentTime);
+            const minFreq = 20;
+            const maxFreq = 20000;
+            const logMin = Math.log(minFreq);
+            const logMax = Math.log(maxFreq);
+            const logCurrent = Math.log(this.filter.frequency.value);
+
+            const logNew = logCurrent + (sensitivity / sliderHeight) * (logMax - logMin);
+            const newFreq = Math.exp(logNew);
+            
+            this.filter.frequency.cancelScheduledValues(now);
+            this.filter.frequency.setValueAtTime(this.filter.frequency.value, now);
+            this.filter.frequency.linearRampToValueAtTime(Math.max(minFreq, Math.min(maxFreq, newFreq)), now + rampTime);
+
         } else if (this.activeControl === 'q') {
             const minQ = 0.1;
             const maxQ = 30;
             const currentQ = this.filter.Q.value;
             const newQ = currentQ + (sensitivity / sliderHeight) * (maxQ - minQ);
-            this.filter.Q.setValueAtTime(Math.max(minQ, Math.min(maxQ, newQ)), audioContext.currentTime);
+
+            this.filter.Q.cancelScheduledValues(now);
+            this.filter.Q.setValueAtTime(this.filter.Q.value, now);
+            this.filter.Q.linearRampToValueAtTime(Math.max(minQ, Math.min(maxQ, newQ)), now + rampTime);
         }
     }
 
