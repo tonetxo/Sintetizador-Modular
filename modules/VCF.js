@@ -6,8 +6,8 @@ export class VCF {
         this.id = id || `vcf-${Date.now()}`;
         this.x = x;
         this.y = y;
-        this.width = 130;
-        this.height = 160;
+        this.width = 160;
+        this.height = 180;
         this.type = 'VCF';
 
         this.filter = audioContext.createBiquadFilter();
@@ -38,40 +38,60 @@ export class VCF {
         ctx.fillRect(0, 0, this.width, this.height);
         ctx.strokeRect(0, 0, this.width, this.height);
 
-        this.drawParams(ctx);
-        
-        ctx.strokeStyle = '#E0E0E0';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(30, 80);
-        ctx.lineTo(this.width - 30, 80);
-        ctx.lineTo(this.width - 30, this.height - 50);
-        ctx.closePath();
-        ctx.stroke();
-        
-        ctx.beginPath();
-        ctx.moveTo(30, 90);
-        ctx.lineTo(this.width - 40, this.height - 55);
-        ctx.stroke();
+        ctx.fillStyle = '#E0E0E0';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('VCF', this.width / 2, 22);
+
+        // Dibujar deslizador de Cutoff
+        this.drawVerticalSlider(ctx, 'cutoff', 30, 50, 120, 20, 20000, this.filter.frequency.value, 'Hz');
+
+        // Dibujar deslizador de Q
+        this.drawVerticalSlider(ctx, 'q', this.width - 30, 50, 120, 0, 30, this.filter.Q.value, '');
 
         ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
     }
 
-    drawParams(ctx) {
+    drawVerticalSlider(ctx, paramName, x, y, height, minVal, maxVal, currentValue, unit) {
+        const sliderWidth = 10;
+        const knobRadius = 8;
+
+        // Etiqueta
         ctx.fillStyle = '#E0E0E0';
-        ctx.font = '11px Arial';
+        ctx.font = '10px Arial';
         ctx.textAlign = 'center';
+        ctx.fillText(paramName.toUpperCase(), x, y - 5);
 
-        const qText = `Q: ${this.filter.Q.value.toFixed(1)}`;
-        ctx.fillStyle = this.activeControl === 'q' ? '#aaffff' : '#E0E0E0';
-        ctx.fillText(qText, this.width / 2, 22);
-        this.paramHotspots['q'] = { x: this.width/2 - 20, y: 12, width: 40, height: 15 };
+        // Barra del slider
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y + height);
+        ctx.stroke();
 
-        const cutoffText = `Cutoff: ${this.filter.frequency.value.toFixed(0)}Hz`;
-        ctx.fillStyle = this.activeControl === 'cutoff' ? '#aaffff' : '#E0E0E0';
-        ctx.fillText(cutoffText, this.width / 2, 42);
-        this.paramHotspots['cutoff'] = { x: this.width/2 - 40, y: 32, width: 80, height: 15 };
+        // Pomo del slider
+        const normalizedValue = (currentValue - minVal) / (maxVal - minVal);
+        const knobY = y + height - (normalizedValue * height);
+        ctx.beginPath();
+        ctx.arc(x, knobY, knobRadius, 0, Math.PI * 2);
+        ctx.fillStyle = this.activeControl === paramName ? '#aaffff' : '#4a90e2';
+        ctx.fill();
+        ctx.strokeStyle = '#E0E0E0';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Valor
+        ctx.fillText(`${currentValue.toFixed(1)}${unit}`, x, y + height + 15);
+
+        // Guardar hotspot para interacción
+        this.paramHotspots[paramName] = {
+            x: x - knobRadius,
+            y: y,
+            width: knobRadius * 2,
+            height: height
+        };
     }
 
     drawConnectors(ctx, hovered) {
@@ -114,10 +134,10 @@ export class VCF {
     }
 
     checkInteraction(pos) {
+        const localPos = { x: pos.x - this.x, y: pos.y - this.y };
         for (const [param, rect] of Object.entries(this.paramHotspots)) {
-            const worldRect = { x: this.x + rect.x, y: this.y + rect.y, width: rect.width, height: rect.height };
-            if (pos.x >= worldRect.x && pos.x <= worldRect.x + worldRect.width &&
-                pos.y >= worldRect.y && pos.y <= worldRect.y + worldRect.height) {
+            if (localPos.x >= rect.x && localPos.x <= rect.x + rect.width &&
+                localPos.y >= rect.y && localPos.y <= rect.y + rect.height) {
                 this.activeControl = param;
                 return true;
             }
@@ -125,21 +145,24 @@ export class VCF {
         return false;
     }
 
-    handleDragInteraction(dx, dy, isFine) {
+    handleDragInteraction(dx, dy) {
         if (!this.activeControl) return;
-        const sensitivity = dy * -1;
+
+        const sliderHeight = 120; // Altura del deslizador
+        const sensitivity = dy * -1; // Invertir dy para que arrastrar hacia arriba aumente el valor
+
         if (this.activeControl === 'cutoff') {
-            const coarse = 10;
-            const fine = 1;
-            const amount = sensitivity * (isFine ? fine : coarse);
-            const newFreq = this.filter.frequency.value + amount;
-            this.filter.frequency.setTargetAtTime(Math.max(20, Math.min(20000, newFreq)), audioContext.currentTime, 0.01);
+            const minFreq = 20; // Hz
+            const maxFreq = 20000; // Hz
+            const currentFreq = this.filter.frequency.value;
+            const newFreq = currentFreq + (sensitivity / sliderHeight) * (maxFreq - minFreq);
+            this.filter.frequency.setValueAtTime(Math.max(minFreq, Math.min(maxFreq, newFreq)), audioContext.currentTime);
         } else if (this.activeControl === 'q') {
-            const coarse = 0.1;
-            const fine = 0.01;
-            const amount = sensitivity * (isFine ? fine : coarse);
-            const newQ = this.filter.Q.value + amount;
-            this.filter.Q.setTargetAtTime(Math.max(0, Math.min(30, newQ)), audioContext.currentTime, 0.01);
+            const minQ = 0.1;
+            const maxQ = 30;
+            const currentQ = this.filter.Q.value;
+            const newQ = currentQ + (sensitivity / sliderHeight) * (maxQ - minQ);
+            this.filter.Q.setValueAtTime(Math.max(minQ, Math.min(maxQ, newQ)), audioContext.currentTime);
         }
     }
 
@@ -177,12 +200,8 @@ export class VCF {
     setState(state) {
         this.id = state.id || this.id;
         this.x = state.x; this.y = state.y;
-        this.filter.frequency.value = state.cutoff;
-        this.filter.Q.value = state.resonance;
+        this.filter.frequency.setValueAtTime(state.cutoff, audioContext.currentTime);
+        this.filter.Q.setValueAtTime(state.resonance, audioContext.currentTime);
         this.filter.type = state.filterType;
-        this.cutoffKnob.value = state.cutoff;
-        this.resKnob.value = state.resonance;
-        const typeIndex = this.filterTypes.indexOf(state.filterType);
-        this.currentFilterTypeIndex = typeIndex !== -1 ? typeIndex : 0;
     }
 }

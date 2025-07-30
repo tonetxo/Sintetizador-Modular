@@ -228,12 +228,8 @@ function savePatch() {
     const patch = {
         modules: modules.map(m => m.getState ? m.getState() : {}),
         connections: connections.map(c => {
-            // Solución robusta: Volver a encontrar los módulos para asegurar que tenemos el objeto completo
-            const fromModule = getModuleAt(c.fromModule.x, c.fromModule.y);
-            const toModule = getModuleAt(c.toModule.x, c.toModule.y);
-
-            const fromId = fromModule ? fromModule.id : null;
-            const toId = toModule ? toModule.id : null;
+            const fromId = c.fromModule.id;
+            const toId = c.toModule.id;
 
             if (!fromId || !toId) {
                 console.error('FATAL: No se pudo determinar el ID de un módulo al guardar la conexión.', c);
@@ -517,7 +513,7 @@ function onMouseMove(e) {
         const dx = (mousePos.x - lastMousePos.x) / view.zoom;
         const dy = (mousePos.y - lastMousePos.y) / view.zoom;
 
-        if (interactingModule.type === 'ADSR' || interactingModule.type === 'VCF') {
+        if (interactingModule.type === 'ADSR' || interactingModule.type === 'VCF' || interactingModule.type === 'LFO') {
             interactingModule.handleDragInteraction(dx, dy);
         } else {
             interactingModule.handleDragInteraction(worldPos, view);
