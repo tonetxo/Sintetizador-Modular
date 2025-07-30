@@ -11,15 +11,22 @@ export class RingMod {
         this.type = 'RingMod';
 
         // Un modulador en anillo es esencialmente un multiplicador de señales.
-        // Se implementa usando un GainNode donde la señal moduladora controla la ganancia.
-        this.multiplier = audioContext.createGain();
+        // Se implementa usando un AudioWorkletNode para una multiplicación de cuatro cuadrantes.
+        this.ringModNode = new AudioWorkletNode(audioContext, 'ring-mod-processor', { 
+            numberOfInputs: 2, 
+            numberOfOutputs: 1, 
+            outputChannelCount: [1] 
+        });
+        this.readyPromise = Promise.resolve(); // No async operations here, so resolve immediately
+        console.log(`RingMod ${this.id}: AudioWorkletNode created.`);
 
         this.inputs = {
-            'Portadora': { x: 0, y: 40, type: 'audio', target: this.multiplier, orientation: 'horizontal' },
-            'Moduladora': { x: 0, y: 80, type: 'audio', target: this.multiplier.gain, orientation: 'horizontal' }
+            'Portadora': { x: 0, y: 40, type: 'audio', target: this.ringModNode, inputIndex: 0, orientation: 'horizontal' },
+            'Moduladora': { x: 0, y: 80, type: 'audio', target: this.ringModNode, inputIndex: 1, orientation: 'horizontal' }
         };
+        console.log(`RingMod ${this.id}: Inputs defined. Carrier target: ${this.inputs.Portadora.target}, Modulator target: ${this.inputs.Moduladora.target}`);
         this.outputs = {
-            'SALIDA': { x: this.width, y: this.height / 2, type: 'audio', source: this.multiplier, orientation: 'horizontal' }
+            'SALIDA': { x: this.width, y: this.height / 2, type: 'audio', source: this.ringModNode, orientation: 'horizontal' }
         };
     }
 

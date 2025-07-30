@@ -44,9 +44,13 @@ function screenToWorld(x, y) {
     return { x: (x - view.x) / view.zoom, y: (y - view.y) / view.zoom };
 }
 
-function setup() {
+async function setup() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+
+    // Cargar AudioWorklets
+    await audioContext.audioWorklet.addModule('./worklets/ring-mod-processor.js');
+    console.log('RingMod AudioWorklet loaded.');
 
     // Pasar un ID fijo al constructor del Teclado
     const keyboard = new Keyboard(canvas.width / 2 - 125, canvas.height - 150, 'keyboard-main');
@@ -163,6 +167,7 @@ function connectNodes(sourceNode, destConnector) {
         console.error("Target node is not ready or does not exist.", destConnector);
         return;
     }
+    console.log(`Attempting to connect source: ${sourceNode.constructor.name} to target: ${target.constructor.name || target.toString()} (type: ${destConnector.type}, name: ${destConnector.name})`);
 
     // Añadir caso específico para AnalyserNode (osciloscopio)
     if (sourceNode && target instanceof AnalyserNode) {
@@ -362,11 +367,14 @@ function setupEventListeners() {
     });
 }
 
-function addModule(type, x, y) {
+async function addModule(type, x, y) {
     const ModuleClass = MODULE_CLASSES[type];
     if (ModuleClass) {
         // Pasa las coordenadas al constructor
         const newModule = new ModuleClass(x, y);
+        if (newModule.readyPromise) {
+            await newModule.readyPromise;
+        }
         modules.push(newModule);
         selectedModule = newModule;
     }
@@ -506,7 +514,11 @@ function onMouseMove(e) {
         draggingModule.x = newX;
         draggingModule.y = newY;
     } else if (interactingModule && interactingModule.handleDragInteraction) {
-        interactingModule.handleDragInteraction(worldPos);
+        if (interactingModule.type === 'Mixer') {
+            interactingModule.handleDragInteraction(e.movementX, e.movementY, e.shiftKey);
+        } else {
+            interactingModule.handleDragInteraction(worldPos);
+        }
     } else if (isPanning) {
         view.x += e.movementX;
         view.y += e.movementY;
@@ -545,6 +557,7 @@ function onMouseUp(e) {
                     toModule: hit.module, toConnector: hit.connector,
                     type: patchStart.connector.props.type
                 });
+                console.log(`Connection established: ${patchStart.module.type}.${patchStart.connector.name} -> ${hit.module.type}.${hit.connector.name}`);
             }
         } else if (!getModuleAt(worldPos.x, worldPos.y)) {
             showPatchContextMenu(e);
