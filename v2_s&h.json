@@ -1,0 +1,133 @@
+{
+  "modules": [
+    {
+      "id": "keyboard-main",
+      "type": "Keyboard",
+      "x": 446.5,
+      "y": 765,
+      "isPermanent": true
+    },
+    {
+      "id": "output-main",
+      "type": "Output",
+      "x": 932.5,
+      "y": 58,
+      "isPermanent": true
+    },
+    {
+      "id": "vco-1753985843986",
+      "type": "VCO",
+      "x": 78,
+      "y": 243,
+      "waveform": "triangle",
+      "detuneValue": 0
+    },
+    {
+      "id": "lfo-1753985843992",
+      "type": "LFO",
+      "x": 96,
+      "y": 593,
+      "rate": 4.174583435058594,
+      "depth": 1000,
+      "waveform": "sine"
+    },
+    {
+      "id": "sah-1753985843996",
+      "type": "SampleAndHold",
+      "x": 308,
+      "y": 287
+    },
+    {
+      "id": "vca-1753985843996",
+      "type": "VCA",
+      "x": 814,
+      "y": 233
+    },
+    {
+      "id": "adsr-1753985843996",
+      "type": "ADSR",
+      "x": 404,
+      "y": 446,
+      "attack": 0.2753333333333333,
+      "decay": 1.5937083333333333,
+      "sustain": 0.8,
+      "release": 2.2762916666666664
+    },
+    {
+      "id": "vco-1753986082896",
+      "type": "VCO",
+      "x": 604,
+      "y": 76,
+      "waveform": "sawtooth",
+      "detuneValue": 0
+    },
+    {
+      "id": "osc-1753986159331",
+      "type": "Osciloscopio",
+      "x": 301,
+      "y": 50
+    }
+  ],
+  "connections": [
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "adsr-1753985843996",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "TENSION",
+      "toId": "vco-1753985843986",
+      "toConnector": "1V/Oct"
+    },
+    {
+      "fromId": "adsr-1753985843996",
+      "fromConnector": "CV",
+      "toId": "vca-1753985843996",
+      "toConnector": "CV 1"
+    },
+    {
+      "fromId": "vco-1753985843986",
+      "fromConnector": "audio",
+      "toId": "sah-1753985843996",
+      "toConnector": "IN"
+    },
+    {
+      "fromId": "lfo-1753985843992",
+      "fromConnector": "SALIDA",
+      "toId": "sah-1753985843996",
+      "toConnector": "TRIG"
+    },
+    {
+      "fromId": "vca-1753985843996",
+      "fromConnector": "audio",
+      "toId": "output-main",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "sah-1753985843996",
+      "fromConnector": "OUT",
+      "toId": "vco-1753986082896",
+      "toConnector": "1V/Oct"
+    },
+    {
+      "fromId": "vco-1753986082896",
+      "fromConnector": "audio",
+      "toId": "vca-1753985843996",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "lfo-1753985843992",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "sah-1753985843996",
+      "fromConnector": "OUT",
+      "toId": "osc-1753986159331",
+      "toConnector": "input"
+    }
+  ]
+}

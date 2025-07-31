@@ -149,7 +149,7 @@ export class Mixer {
             id: this.id,
             type: 'Mixer',
             x: this.x, y: this.y,
-            levels: this.channelStrips.map(cs => cs.gain.gain.value)
+            levels: this.channels.map(ch => ch.gain.value)
         };
     }
 
@@ -158,8 +158,8 @@ export class Mixer {
         this.x = state.x; this.y = state.y;
         if (state.levels) {
             state.levels.forEach((level, i) => {
-                if (this.channelStrips[i]) {
-                    this.channelStrips[i].gain.gain.value = level;
+                if (this.channels[i]) {
+                    this.channels[i].gain.value = level;
                 }
             });
         }

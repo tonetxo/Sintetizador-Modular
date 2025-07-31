@@ -57,6 +57,11 @@ export class LFO {
         this.outputs = {
             'SALIDA': { x: this.width, y: this.height / 2, type: 'cv', source: this.outputScaler, orientation: 'horizontal' }
         };
+
+        // Aplicar estado inicial si existe (para carga de patch)
+        if (Object.keys(initialState).length > 0) {
+            this.setState(initialState);
+        }
     }
 
     draw(ctx, isSelected, hoveredConnectorInfo) {
@@ -331,6 +336,6 @@ export class LFO {
         }
         const wfIndex = this.waveforms.indexOf(state.waveform);
         this.currentWaveformIndex = (wfIndex !== -1) ? wfIndex : 0;
-        this.oscillator.type = this.waveforms[this.currentWaveformIndex]; // Corregido de this.lfo a this.oscillator
+        this.setWaveform(this.waveforms[this.currentWaveformIndex]);
     }
 }

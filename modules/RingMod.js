@@ -107,7 +107,9 @@ export class RingMod {
     }
     
     disconnect() {
-        this.multiplier.disconnect();
+        if (this.ringModNode) {
+            this.ringModNode.disconnect();
+        }
     }
 
     getState() { return { id: this.id, type: 'RingMod', x: this.x, y: this.y }; }

@@ -8,6 +8,7 @@ import { LFO } from './modules/LFO.js';
 import { Mixer } from './modules/Mixer.js';
 import { RingMod } from './modules/RingMod.js';
 import { SampleAndHold } from './modules/SampleAndHold.js';
+import { Sequencer } from './modules/Sequencer.js';
 import { Keyboard } from './modules/Keyboard.js';
 import { Osciloscopio } from './modules/Osciloscopio.js'; // IMPORTAR LA CLASE OSCILOSCOPIO
 
@@ -20,7 +21,7 @@ const contextMenu = document.getElementById('context-menu');
 const patchContextMenu = document.getElementById('patch-context-menu');
 
 // AÑADIR Osciloscopio a la lista de clases de módulo
-const MODULE_CLASSES = { VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod, SampleAndHold, Osciloscopio };
+const MODULE_CLASSES = { VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod, SampleAndHold, Sequencer, Osciloscopio };
 
 let modules = [];
 let connections = [];
@@ -51,10 +52,13 @@ async function setup() {
     // Cargar AudioWorklets
     await audioContext.audioWorklet.addModule('./worklets/ring-mod-processor.js');
     console.log('RingMod AudioWorklet loaded.');
+    await audioContext.audioWorklet.addModule('./worklets/sequencer-processor.js');
+    console.log('Sequencer AudioWorklet loaded.');
 
     // Pasar un ID fijo al constructor del Teclado
     const keyboard = new Keyboard(canvas.width / 2 - 125, canvas.height - 150, 'keyboard-main');
     modules.push(keyboard);
+    console.log("Modules after keyboard push in setup:", modules);
     
     const masterOutputNode = audioContext.destination;
     
@@ -104,6 +108,7 @@ async function setup() {
         }
     };
     modules.push(outputModule);
+    console.log("Modules after outputModule push in setup:", modules);
     
     draw();
     setupEventListeners();
@@ -269,42 +274,56 @@ async function loadPatch() {
 }
 
 async function reconstructPatch(patchData) {
+    console.log("Patch data modules received:", patchData.modules);
     // Desconectar y eliminar todos los módulos no permanentes
     modules.filter(m => !m.isPermanent).forEach(m => m.disconnect && m.disconnect());
-    const permanentModules = modules.filter(m => m.isPermanent);
+    let permanentModules = modules.filter(m => m.isPermanent);
+    permanentModules = permanentModules.filter(m => m !== null && m !== undefined);
     modules = [...permanentModules];
     connections = [];
     selectedModule = null;
 
+    console.log("Permanent modules before processing patch data:", permanentModules);
+
     const modulePromises = patchData.modules.map(async (moduleState) => {
         if (moduleState.isPermanent) {
-            // Encontrar el módulo permanente existente por su ID único
             const existingModule = permanentModules.find(m => m.id === moduleState.id);
             if (existingModule && existingModule.setState) {
                 existingModule.setState(moduleState);
             }
-            return existingModule;
+            return null; // Do not add permanent modules to loadedModules
         }
-        if (!moduleState.type) return null;
+        if (!moduleState.type) {
+            console.warn("Module state has no type, skipping:", moduleState);
+            return null;
+        }
         const ModuleClass = MODULE_CLASSES[moduleState.type];
         if (ModuleClass) {
-            // Crear nueva instancia para módulos no permanentes
             const newModule = new ModuleClass(moduleState.x, moduleState.y, moduleState.id, moduleState);
             if (newModule.readyPromise) await newModule.readyPromise;
+            
+            // ASIGNAR CALLBACKS AL CARGAR PATCH
+            if (newModule.type === 'Sequencer') {
+                setupSequencerCallbacks(newModule);
+            }
+            
             return newModule;
         }
+        console.warn("Module class not found for type:", moduleState.type, "Skipping module:", moduleState);
         return null;
     });
 
-    // La nueva lista de módulos es directamente el resultado de las promesas
-    const loadedModules = (await Promise.all(modulePromises)).filter(m => m !== null);
-    modules = loadedModules;
+    const loadedModules = (await Promise.all(modulePromises)).filter(m => m);
+    console.log("Loaded modules from patch data (after filtering nulls):", loadedModules);
+
+    modules = [...permanentModules, ...loadedModules];
+    console.log("Final modules array after reconstructPatch:", modules);
 
     const moduleMap = new Map(modules.map(m => [m.id, m]));
 
     patchData.connections.forEach(connData => {
-        const fromModule = moduleMap.get(connData.fromId);
-        const toModule = moduleMap.get(connData.toId);
+        const fromModule = moduleMap.get(String(connData.fromId));
+        const toModule = moduleMap.get(String(connData.toId));
 
         if (!fromModule || !toModule) {
             console.warn('Módulo no encontrado para la conexión:', connData);
@@ -319,7 +338,6 @@ async function reconstructPatch(patchData) {
             return;
         }
 
-        // Lóxica de conexión unificada
         if (fromConnector.source && toConnector.target) {
             connectNodes(fromConnector.source, toConnector);
         }
@@ -331,6 +349,33 @@ async function reconstructPatch(patchData) {
             type: fromConnector.type
         });
     });
+}
+
+function setupSequencerCallbacks(sequencerModule) {
+    sequencerModule.onGateOn = () => {
+        const now = audioContext.currentTime;
+        console.log(`[Renderer] Sequencer Gate ON. Time: ${now}`);
+        connections.forEach(conn => {
+            if (conn.fromModule === sequencerModule && conn.fromConnector.name === 'Gate Out') {
+                if (conn.toModule.triggerOn) {
+                    console.log(`[Renderer] Triggering ON for ${conn.toModule.type} (${conn.toModule.id})`);
+                    conn.toModule.triggerOn(now);
+                }
+            }
+        });
+    };
+    sequencerModule.onGateOff = () => {
+        const now = audioContext.currentTime;
+        console.log(`[Renderer] Sequencer Gate OFF. Time: ${now}`);
+        connections.forEach(conn => {
+            if (conn.fromModule === sequencerModule && conn.fromConnector.name === 'Gate Out') {
+                if (conn.toModule.triggerOff) {
+                    console.log(`[Renderer] Triggering OFF for ${conn.toModule.type} (${conn.toModule.id})`);
+                    conn.toModule.triggerOff(now);
+                }
+            }
+        });
+    };
 }
 
 function setupEventListeners() {
@@ -370,11 +415,15 @@ function setupEventListeners() {
 async function addModule(type, x, y) {
     const ModuleClass = MODULE_CLASSES[type];
     if (ModuleClass) {
-        // Pasa las coordenadas al constructor
         const newModule = new ModuleClass(x, y);
         if (newModule.readyPromise) {
             await newModule.readyPromise;
         }
+
+        if (newModule.type === 'Sequencer') {
+            setupSequencerCallbacks(newModule);
+        }
+
         modules.push(newModule);
         selectedModule = newModule;
     }
@@ -477,7 +526,8 @@ function onMouseDown(e) {
                 return;
             }
             if (moduleHit.handleClick && moduleHit.handleClick(worldPos.x, worldPos.y)) {
-                console.log(`LFO handleClick called for module ${moduleHit.id}`);
+                // No es necesario un log para cada click, pero si se quisiera, sería así:
+                // console.log(`handleClick called for module ${moduleHit.id}`);
                 return;
             }
             draggingModule = moduleHit;

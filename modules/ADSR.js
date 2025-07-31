@@ -12,10 +12,10 @@ export class ADSR {
         this.type = 'ADSR';
 
         this.params = {
-            attack: initialState.attack || 0.01,
-            decay: initialState.decay || 0.1,
-            sustain: initialState.sustain || 0.8,
-            release: initialState.release || 0.2
+            attack: 0.01,
+            decay: 0.1,
+            sustain: 0.8,
+            release: 0.2
         };
 
         this.activeControl = null;
@@ -37,6 +37,11 @@ export class ADSR {
         this.outputs = {
             'CV': { x: this.width, y: this.height / 2, type: 'cv', source: cvOutput, orientation: 'horizontal' }
         };
+
+        // Aplicar estado inicial si existe (para carga de patch)
+        if (Object.keys(initialState).length > 0) {
+            this.setState(initialState);
+        }
     }
 
     draw(ctx, isSelected, hoveredConnectorInfo) {
