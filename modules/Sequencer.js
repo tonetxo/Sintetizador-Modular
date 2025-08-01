@@ -5,27 +5,28 @@ export class Sequencer {
     constructor(x, y, id = null, initialState = {}) {
         this.id = id || `sequencer-${Date.now()}`;
         this.type = 'Sequencer';
+        this.type = 'Sequencer';
         this.x = x;
         this.y = y;
         this.width = 500;
-        this.height = 320; // Aumentar altura para los nuevos controles
+        this.height = 320;
 
         this.params = {
             tempo: initialState.tempo || 120,
             direction: initialState.direction || 0,
             steps: initialState.steps || 16,
-            running: initialState.running !== undefined ? initialState.running : true,
+            running: initialState.running !== undefined ? initialState.running : false,
             sequence: initialState.sequence || Array(16).fill(0.5),
             gateLengths: initialState.gateLengths || Array(16).fill(0.5),
-            stepStates: initialState.stepStates || Array(16).fill(0), // 0:On, 1:Off, 2:Skip
+            stepStates: initialState.stepStates || Array(16).fill(0),
         };
         
         this.directionModes = ['FWD', 'BWD', 'P-P', 'RND'];
-        this.hotspots = {}; // Para zonas de click/drag de los nuevos controles
-        this.dragStart = {}; // Para guardar el estado inicial del arrastre
-
+        this.hotspots = {};
+        this.dragStart = {};
         this.activeControl = null;
         this.currentStep = 0;
+        this.lastRunningState = initialState.running !== undefined ? initialState.running : false;
         
         this.onGateOn = null;
         this.onGateOff = null;
@@ -33,10 +34,12 @@ export class Sequencer {
         this.inputs = {};
         this.outputs = {};
 
+        console.log(`[Sequencer-${this.id}] Constructor: Initial running state: ${this.params.running}`);
         this.readyPromise = this.initWorklet();
     }
 
     async initWorklet() {
+        console.log(`[Sequencer-${this.id}] Initializing worklet...`);
         this.inputs = {
             'Clock In': { x: 20, y: this.height, type: 'gate', orientation: 'vertical' },
             'Reset In': { x: 60, y: this.height, type: 'gate', orientation: 'vertical' },
@@ -53,7 +56,7 @@ export class Sequencer {
                 numberOfOutputs: 2,
                 outputChannelCount: [1, 1]
             });
-            console.log('Sequencer worklet node created.');
+            console.log(`[Sequencer-${this.id}] Worklet node created.`);
 
             this.inputs['Clock In'].target = this.workletNode;
             this.inputs['Clock In'].inputIndex = 0;
@@ -64,42 +67,58 @@ export class Sequencer {
             this.cvOutput = this.workletNode;
             this.outputs['CV Out'].source = this.cvOutput;
 
-            const gateGain = audioContext.createGain();
-            gateGain.gain.value = 1.0;
-            this.workletNode.connect(gateGain, 1, 0);
-            this.gateOutput = gateGain;
-            this.outputs['Gate Out'].source = this.gateOutput;
+            this.outputs['Gate Out'].source = this.workletNode.parameters.get('gateLevel');
             
             this.workletNode.port.onmessage = (e) => {
                 if (e.data.currentStep !== undefined) {
                     this.currentStep = e.data.currentStep;
+                    // console.log(`[Sequencer-${this.id}] Current step: ${this.currentStep}`);
                 }
                 if (e.data.type === 'gateOn') {
-                    console.log('[Main] Received gateOn');
+                    console.log(`[Sequencer-${this.id}] Received gateOn from worklet.`);
                     if (this.onGateOn) this.onGateOn();
                 }
                 if (e.data.type === 'gateOff') {
-                    console.log('[Main] Received gateOff');
+                    console.log(`[Sequencer-${this.id}] Received gateOff from worklet.`);
                     if (this.onGateOff) this.onGateOff();
                 }
             };
             
-            this.updateWorkletState();
-
+            await this.updateWorkletState();
+            console.log(`[Sequencer-${this.id}] Worklet initialized and state updated.`);
+            return true;
         } catch (error) {
-            console.error('Error initializing sequencer worklet:', error);
+            console.error(`[Sequencer-${this.id}] Error initializing sequencer worklet:`, error);
+            throw error;
         }
     }
-    
-    updateWorkletState() {
-        if (!this.workletNode) return;
+
+    async updateWorkletState() {
+        // No esperar this.readyPromise aquí, ya que esta función es llamada por initWorklet
+        // y también por setState y handleClick, donde readyPromise ya debería estar resuelta.
+        if (!this.workletNode) {
+            console.warn(`[Sequencer-${this.id}] updateWorkletState called but workletNode is null.`);
+            return;
+        }
+
+        console.log(`[Sequencer-${this.id}] Updating worklet state. Running: ${this.params.running}`);
         this.workletNode.parameters.get('tempo').setValueAtTime(this.params.tempo, audioContext.currentTime);
         this.workletNode.parameters.get('direction').setValueAtTime(this.params.direction, audioContext.currentTime);
         this.workletNode.parameters.get('steps').setValueAtTime(this.params.steps, audioContext.currentTime);
-        this.workletNode.parameters.get('running').setValueAtTime(this.params.running ? 1 : 0, audioContext.currentTime);
+
+        // Always send the current running state to the worklet
+        if (this.params.running) {
+            this.workletNode.port.postMessage({ type: 'start' });
+        } else {
+            this.workletNode.port.postMessage({ type: 'stop' });
+        }
+        // Update lastRunningState after sending the message
+        this.lastRunningState = this.params.running;
+
         this.workletNode.port.postMessage({ type: 'updateSequence', sequence: this.params.sequence });
         this.workletNode.port.postMessage({ type: 'updateGateLengths', gateLengths: this.params.gateLengths });
         this.workletNode.port.postMessage({ type: 'updateStepStates', stepStates: this.params.stepStates });
+        console.log(`[Sequencer-${this.id}] Worklet state update messages sent.`);
     }
 
     draw(ctx, isSelected, hoveredConnectorInfo) {
@@ -117,7 +136,6 @@ export class Sequencer {
         ctx.textAlign = 'center';
         ctx.fillText('SEQUENCER', this.width / 2, 22);
 
-        // Draw steps
         const stepWidth = 28;
         const stepSpacing = 2;
         for (let i = 0; i < 16; i++) {
@@ -125,7 +143,6 @@ export class Sequencer {
             this.drawStep(ctx, i, stepX, 40, stepWidth);
         }
         
-        // --- Draw global controls ---
         const controlsY = 240;
         this.drawKnob(ctx, 'tempo', 'TEMPO', 50, controlsY, 20, 300, this.params.tempo);
         this.drawButton(ctx, 'run/stop', this.params.running ? 'STOP' : 'START', 120, controlsY, 60, 30);
@@ -304,7 +321,7 @@ export class Sequencer {
             const localY = worldPos.y - this.y;
             const dy = this.dragStart.y - localY;
             const range = hotspot.max - hotspot.min;
-            const sensitivity = range / 128; // Sensibilidad ajustada
+            const sensitivity = range / 128;
             let newValue = this.dragStart.value + dy * sensitivity;
             newValue = Math.max(hotspot.min, Math.min(hotspot.max, newValue));
             
@@ -336,19 +353,25 @@ export class Sequencer {
         }
     }
     
-    handleClick(x, y) {
+    async handleClick(x, y) {
         const localPos = { x: x - this.x, y: y - this.y };
 
         for (const [name, spot] of Object.entries(this.hotspots)) {
             if (this.isInside(localPos, spot)) {
                 if (spot.type === 'button' && name === 'run/stop') {
+                    console.log(`[Sequencer-${this.id}] Run/Stop button clicked. Current running state: ${this.params.running}`);
+                    if (audioContext.state === 'suspended') {
+                        await audioContext.resume();
+                        console.log(`[Sequencer-${this.id}] AudioContext resumed.`);
+                    }
                     this.params.running = !this.params.running;
-                    this.updateWorkletState();
+                    console.log(`[Sequencer-${this.id}] New running state: ${this.params.running}. Updating worklet state...`);
+                    await this.updateWorkletState();
                     return true;
                 }
                 if (spot.type === 'selector' && name === 'direction') {
                     this.params.direction = (this.params.direction + 1) % this.directionModes.length;
-                    this.updateWorkletState();
+                    await this.updateWorkletState();
                     return true;
                 }
             }
@@ -362,7 +385,7 @@ export class Sequencer {
             const switchRect = { x: stepX, y: switchY, width: stepWidth, height: 15 };
             if (this.isInside(localPos, switchRect)) {
                 this.params.stepStates[i] = (this.params.stepStates[i] + 1) % 3;
-                this.updateWorkletState();
+                await this.updateWorkletState();
                 return true;
             }
         }
@@ -401,10 +424,11 @@ export class Sequencer {
         };
     }
 
-    setState(state) {
+    async setState(state) {
         this.id = state.id || this.id;
-        this.x = state.x; this.y = state.y;
+        this.x = state.x;
+        this.y = state.y;
         Object.assign(this.params, state);
-        this.updateWorkletState();
+        await this.updateWorkletState();
     }
 }

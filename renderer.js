@@ -10,7 +10,10 @@ import { RingMod } from './modules/RingMod.js';
 import { SampleAndHold } from './modules/SampleAndHold.js';
 import { Sequencer } from './modules/Sequencer.js';
 import { Keyboard } from './modules/Keyboard.js';
-import { Osciloscopio } from './modules/Osciloscopio.js'; // IMPORTAR LA CLASE OSCILOSCOPIO
+import { Osciloscopio } from './modules/Osciloscopio.js';
+import { Delay } from './modules/Delay.js';
+import { Compressor } from './modules/Compressor.js';
+import { Reverb } from './modules/Reverb.js';
 
 const { dialog } = require('@electron/remote');
 const fs = require('fs');
@@ -20,14 +23,16 @@ const ctx = canvas.getContext('2d');
 const contextMenu = document.getElementById('context-menu');
 const patchContextMenu = document.getElementById('patch-context-menu');
 
-// AÑADIR Osciloscopio a la lista de clases de módulo
-const MODULE_CLASSES = { VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod, SampleAndHold, Sequencer, Osciloscopio };
+const MODULE_CLASSES = { 
+  VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod, 
+  SampleAndHold, Sequencer, Osciloscopio, Delay, 
+  Compressor, Reverb, Keyboard 
+};
 
 let modules = [];
 let connections = [];
 let selectedModule = null;
 let selectedConnection = null;
-
 let draggingModule = null;
 let interactingModule = null;
 let dragOffset = { x: 0, y: 0 };
@@ -37,685 +42,695 @@ let isPanning = false;
 let lastMousePos = { x: 0, y: 0 };
 let mousePos = { x: 0, y: 0 };
 let hoveredConnectorInfo = null;
+let audioContextReady = false;
 
 const view = { x: 0, y: 0, zoom: 1, minZoom: 0.2, maxZoom: 2.0 };
 const CABLE_COLORS = { audio: '#f0a048', cv: '#ff80ab', gate: '#ff80ab' };
 
+// Helper functions
 function screenToWorld(x, y) {
-    return { x: (x - view.x) / view.zoom, y: (y - view.y) / view.zoom };
+  return { x: (x - view.x) / view.zoom, y: (y - view.y) / view.zoom };
 }
 
-async function setup() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    // Cargar AudioWorklets
+async function initAudioContext() {
+  try {
+    // Resume AudioContext if suspended
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+    
+    // Load AudioWorklets
     await audioContext.audioWorklet.addModule('./worklets/ring-mod-processor.js');
-    console.log('RingMod AudioWorklet loaded.');
     await audioContext.audioWorklet.addModule('./worklets/sequencer-processor.js');
-    console.log('Sequencer AudioWorklet loaded.');
-
-    // Pasar un ID fijo al constructor del Teclado
-    const keyboard = new Keyboard(canvas.width / 2 - 125, canvas.height - 150, 'keyboard-main');
-    modules.push(keyboard);
-    console.log("Modules after keyboard push in setup:", modules);
     
-    const masterOutputNode = audioContext.destination;
-    
-    // Módulo de Salida (permanente) con ID fijo
-    const outputModule = {
-        id: 'output-main', // ID fijo para la salida
-        x: canvas.width / 2 - 50, y: 50, width: 100, height: 80, isPermanent: true, type: 'Output',
-        inputs: { 'audio': { x: 0, y: 40, type: 'audio', target: masterOutputNode, orientation: 'horizontal' } },
-        outputs: {},
-        draw: function(ctx, isSelected, hovered) {
-            ctx.save();
-            ctx.translate(this.x, this.y);
-            ctx.fillStyle = '#1a1a1a';
-            ctx.strokeStyle = isSelected ? '#aaffff' : '#888';
-            ctx.lineWidth = 2;
-            ctx.fillRect(0, 0, this.width, this.height);
-            ctx.strokeRect(0, 0, this.width, this.height);
-            ctx.fillStyle = '#E0E0E0';
-            ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('SALIDA', this.width / 2, this.height / 2 + 5);
-            ctx.restore();
-            
-            const isHovered = hovered && hovered.module === this;
-            const connectorRadius = 8;
-            const x = this.x + this.inputs.audio.x;
-            const y = this.y + this.inputs.audio.y;
-            ctx.beginPath();
-            ctx.arc(x, y, connectorRadius, 0, Math.PI * 2);
-            ctx.fillStyle = isHovered ? 'white' : '#4a90e2';
-            ctx.fill();
-        },
-        getConnectorAt: function(x, y) {
-            for (const [name, props] of Object.entries(this.inputs)) {
-                const dist = Math.sqrt(Math.pow(x - (this.x + props.x), 2) + Math.pow(y - (this.y + props.y), 2));
-                if (dist < 9) return { name, type: 'input', props, module: this };
-            }
-            return null;
-        },
-        getState: function() { // Método getState para la serialización del Output
-            return { id: this.id, type: this.type, x: this.x, y: this.y, isPermanent: this.isPermanent };
-        },
-        // Añadir setState para la consistencia
-        setState: function(state) {
-            this.x = state.x;
-            this.y = state.y;
-        }
-    };
-    modules.push(outputModule);
-    console.log("Modules after outputModule push in setup:", modules);
-    
-    draw();
-    setupEventListeners();
+    audioContextReady = true;
+    console.log('AudioContext initialized successfully');
+  } catch (error) {
+    console.error('Error initializing AudioContext:', error);
+    throw error;
+  }
 }
 
 function draw() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    ctx.save();
-    ctx.translate(view.x, view.y);
-    ctx.scale(view.zoom, view.zoom);
-    ctx.fillStyle = '#3c3c3c';
-    ctx.fillRect(-view.x / view.zoom, -view.y / view.zoom, canvas.width / view.zoom, canvas.height / view.zoom);
+  // Clear canvas
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
 
-    ctx.lineWidth = 3.5;
-    connections.forEach(conn => {
-        const fromPos = { x: conn.fromModule.x + conn.fromConnector.props.x, y: conn.fromModule.y + conn.fromConnector.props.y };
-        const toPos = { x: conn.toModule.x + conn.toConnector.props.x, y: conn.toModule.y + conn.toConnector.props.y };
-        
-        const dist = Math.sqrt(Math.pow(toPos.x - fromPos.x, 2) + Math.pow(toPos.y - fromPos.y, 2));
-        const droop = Math.min(100, dist * 0.4);
+  // Apply view transformations
+  ctx.save();
+  ctx.translate(view.x, view.y);
+  ctx.scale(view.zoom, view.zoom);
 
-        const cp1x = fromPos.x + (conn.fromConnector.props.orientation === 'horizontal' ? droop : 0);
-        const cp1y = fromPos.y + (conn.fromConnector.props.orientation === 'vertical' ? droop : 0);
-        const cp2x = toPos.x - (conn.toConnector.props.orientation === 'horizontal' ? droop : 0);
-        const cp2y = toPos.y + (conn.toConnector.props.orientation === 'vertical' ? droop : 0);
+  // Draw background
+  ctx.fillStyle = '#3c3c3c';
+  ctx.fillRect(-view.x / view.zoom, -view.y / view.zoom, 
+               canvas.width / view.zoom, canvas.height / view.zoom);
 
-        ctx.beginPath();
-        ctx.moveTo(fromPos.x, fromPos.y);
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, toPos.x, toPos.y);
-        ctx.strokeStyle = (conn === selectedConnection) ? 'white' : (CABLE_COLORS[conn.type] || '#888');
-        ctx.stroke();
-    });
+  // Draw connections
+  ctx.lineWidth = 3.5;
+  connections.forEach(conn => {
+    const fromPos = { 
+      x: conn.fromModule.x + conn.fromConnector.props.x, 
+      y: conn.fromModule.y + conn.fromConnector.props.y 
+    };
+    const toPos = { 
+      x: conn.toModule.x + conn.toConnector.props.x, 
+      y: conn.toModule.y + conn.toConnector.props.y 
+    };
+    
+    const dist = Math.sqrt(Math.pow(toPos.x - fromPos.x, 2) + Math.pow(toPos.y - fromPos.y, 2));
+    const droop = Math.min(100, dist * 0.4);
 
-    if (isPatching) {
-        ctx.strokeStyle = CABLE_COLORS[patchStart.connector.props.type] || '#888';
-        const fromPos = patchStart;
-        const worldMouse = screenToWorld(mousePos.x, mousePos.y);
-        
-        const dist = Math.sqrt(Math.pow(worldMouse.x - fromPos.x, 2) + Math.pow(worldMouse.y - fromPos.y, 2));
-        const droop = Math.min(100, dist * 0.4);
+    const cp1x = fromPos.x + (conn.fromConnector.props.orientation === 'horizontal' ? droop : 0);
+    const cp1y = fromPos.y + (conn.fromConnector.props.orientation === 'vertical' ? droop : 0);
+    const cp2x = toPos.x - (conn.toConnector.props.orientation === 'horizontal' ? droop : 0);
+    const cp2y = toPos.y + (conn.toConnector.props.orientation === 'vertical' ? droop : 0);
 
-        const cp1x = fromPos.x + (fromPos.connector.props.orientation === 'horizontal' ? droop : 0);
-        const cp1y = fromPos.y + (fromPos.connector.props.orientation === 'vertical' ? droop : 0);
-        
-        ctx.beginPath();
-        ctx.moveTo(fromPos.x, fromPos.y);
-        ctx.bezierCurveTo(cp1x, cp1y, worldMouse.x, worldMouse.y - droop, worldMouse.x, worldMouse.y);
-        ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.moveTo(fromPos.x, fromPos.y);
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, toPos.x, toPos.y);
+    ctx.strokeStyle = (conn === selectedConnection) ? 'white' : (CABLE_COLORS[conn.type] || '#888');
+    ctx.stroke();
+  });
 
-    // AHORA CADA MÓDULO (incluido el Osciloscopio) DIBUJA SÍ MISMO
-    modules.forEach(module => module.draw(ctx, module === selectedModule, hoveredConnectorInfo));
-    ctx.restore();
-    requestAnimationFrame(draw);
+  // Draw active patch connection
+  if (isPatching) {
+    ctx.strokeStyle = CABLE_COLORS[patchStart.connector.props.type] || '#888';
+    const fromPos = patchStart;
+    const worldMouse = screenToWorld(mousePos.x, mousePos.y);
+    
+    const dist = Math.sqrt(Math.pow(worldMouse.x - fromPos.x, 2) + Math.pow(worldMouse.y - fromPos.y, 2));
+    const droop = Math.min(100, dist * 0.4);
+
+    const cp1x = fromPos.x + (fromPos.connector.props.orientation === 'horizontal' ? droop : 0);
+    const cp1y = fromPos.y + (fromPos.connector.props.orientation === 'vertical' ? droop : 0);
+    
+    ctx.beginPath();
+    ctx.moveTo(fromPos.x, fromPos.y);
+    ctx.bezierCurveTo(cp1x, cp1y, worldMouse.x, worldMouse.y - droop, worldMouse.x, worldMouse.y);
+    ctx.stroke();
+  }
+
+  // Draw modules
+  modules.forEach(module => {
+    module.draw(ctx, module === selectedModule, hoveredConnectorInfo);
+  });
+
+  ctx.restore();
+  requestAnimationFrame(draw);
 }
 
 function connectNodes(sourceNode, destConnector) {
-    const target = destConnector.target;
-    if (!target) {
-        console.error("Target node is not ready or does not exist.", destConnector);
-        return;
-    }
-    console.log(`Attempting to connect source: ${sourceNode.constructor.name} to target: ${target.constructor.name || target.toString()} (type: ${destConnector.type}, name: ${destConnector.name})`);
+  const target = destConnector.target;
+  if (!target) {
+    console.error("Target node is not ready or does not exist.", destConnector);
+    return;
+  }
 
-    // Añadir caso específico para AnalyserNode (osciloscopio)
-    if (sourceNode && target instanceof AnalyserNode) {
-        sourceNode.connect(target);
-    } else if (target instanceof AudioWorkletNode) {
-        sourceNode.connect(target, 0, destConnector.inputIndex);
-    } else if (target instanceof AudioParam) {
-        sourceNode.connect(target);
-    } else {
-        sourceNode.connect(target, 0, destConnector.inputIndex || 0);
-    }
+  if (sourceNode && target instanceof AnalyserNode) {
+    sourceNode.connect(target);
+  } else if (target instanceof AudioWorkletNode) {
+    sourceNode.connect(target, 0, destConnector.inputIndex);
+  } else if (target instanceof AudioParam) {
+    sourceNode.connect(target);
+  } else {
+    sourceNode.connect(target, 0, destConnector.inputIndex || 0);
+  }
 }
 
 function disconnectNodes(sourceNode, destConnector) {
-    const target = destConnector.target;
-    if (!target) return;
+  const target = destConnector.target;
+  if (!target) return;
 
-    try {
-        // Añadir caso específico para AnalyserNode
-        if (sourceNode && target instanceof AnalyserNode) {
-            sourceNode.disconnect(target);
-        } else if (target instanceof AudioWorkletNode) {
-            sourceNode.disconnect(target, 0, destConnector.inputIndex);
-        } else if (target instanceof AudioParam) {
-            sourceNode.disconnect(target);
-        } else {
-            sourceNode.disconnect(target, 0, destConnector.inputIndex || 0);
-        }
-    } catch(e) { console.warn("Error disconnecting node:", e); }
+  try {
+    if (sourceNode && target instanceof AnalyserNode) {
+      sourceNode.disconnect(target);
+    } else if (target instanceof AudioWorkletNode) {
+      sourceNode.disconnect(target, 0, destConnector.inputIndex);
+    } else if (target instanceof AudioParam) {
+      sourceNode.disconnect(target);
+    } else {
+      sourceNode.disconnect(target, 0, destConnector.inputIndex || 0);
+    }
+  } catch(e) { 
+    console.warn("Error disconnecting node:", e); 
+  }
 }
 
 function deleteSelection() {
-    if (selectedConnection) {
-        const conn = selectedConnection;
-        // Para todo tipo de conexión, desconectar o nodo de audio se existe
-        if (conn.fromConnector.props.source && conn.toConnector.props.target) {
-            disconnectNodes(conn.fromConnector.props.source, conn.toConnector.props);
-        }
-        const index = connections.indexOf(conn);
-        if (index > -1) connections.splice(index, 1);
-        selectedConnection = null;
-    } else if (selectedModule && !selectedModule.isPermanent) {
-        if (selectedModule.disconnect) { selectedModule.disconnect(); }
-        connections = connections.filter(conn => {
-            const shouldRemove = conn.fromModule === selectedModule || conn.toModule === selectedModule;
-            if (shouldRemove && conn.fromConnector.props.source && conn.toConnector.props.target) {
-                 disconnectNodes(conn.fromConnector.props.source, conn.toConnector.props);
-            }
-            return !shouldRemove;
-        });
-        const index = modules.indexOf(selectedModule);
-        if(index > -1) modules.splice(index, 1);
-        selectedModule = null;
+  if (selectedConnection) {
+    const conn = selectedConnection;
+    if (conn.fromConnector.props.source && conn.toConnector.props.target) {
+      disconnectNodes(conn.fromConnector.props.source, conn.toConnector.props);
     }
+    connections = connections.filter(c => c !== conn);
+    selectedConnection = null;
+  } else if (selectedModule && !selectedModule.isPermanent) {
+    if (selectedModule.disconnect) { 
+      selectedModule.disconnect(); 
+    }
+    
+    connections = connections.filter(conn => {
+      const shouldRemove = conn.fromModule === selectedModule || conn.toModule === selectedModule;
+      if (shouldRemove && conn.fromConnector.props.source && conn.toConnector.props.target) {
+        disconnectNodes(conn.fromConnector.props.source, conn.toConnector.props);
+      }
+      return !shouldRemove;
+    });
+    
+    modules = modules.filter(m => m !== selectedModule);
+    selectedModule = null;
+  }
 }
 
-function savePatch() {
-    const patch = {
-        modules: modules.map(m => m.getState ? m.getState() : {}),
-        connections: connections.map(c => {
-            const fromId = c.fromModule.id;
-            const toId = c.toModule.id;
+async function savePatch() {
+  const patch = {
+    modules: modules.map(m => m.getState ? m.getState() : {}),
+    connections: connections.map(c => ({
+      fromId: c.fromModule.id,
+      fromConnector: c.fromConnector.name,
+      toId: c.toModule.id,
+      toConnector: c.toConnector.name,
+    })).filter(c => c.fromId && c.toId)
+  };
 
-            if (!fromId || !toId) {
-                console.error('FATAL: No se pudo determinar el ID de un módulo al guardar la conexión.', c);
-                return null;
-            }
+  const result = await dialog.showSaveDialog({
+    title: 'Guardar Patch', 
+    defaultPath: 'patch.json',
+    filters: [{ name: 'JSON Files', extensions: ['json'] }]
+  });
 
-            return {
-                fromId: fromId,
-                fromConnector: c.fromConnector.name,
-                toId: toId,
-                toConnector: c.toConnector.name,
-            };
-        }).filter(c => c !== null)
-    };
-
-    dialog.showSaveDialog({
-        title: 'Guardar Patch', defaultPath: 'patch.json',
-        filters: [{ name: 'JSON Files', extensions: ['json'] }]
-    }).then(result => {
-        if (!result.canceled && result.filePath) {
-            fs.writeFileSync(result.filePath, JSON.stringify(patch, null, 2));
-            console.log('Patch guardado correctamente.');
-        }
-    });
+  if (!result.canceled && result.filePath) {
+    fs.writeFileSync(result.filePath, JSON.stringify(patch, null, 2));
+  }
 }
 
 async function loadPatch() {
-    const result = await dialog.showOpenDialog({
-        title: 'Cargar Patch', properties: ['openFile'],
-        filters: [{ name: 'JSON Files', extensions: ['json'] }]
-    });
+  const result = await dialog.showOpenDialog({
+    title: 'Cargar Patch', 
+    properties: ['openFile'],
+    filters: [{ name: 'JSON Files', extensions: ['json'] }]
+  });
 
-    if (!result.canceled && result.filePaths.length > 0) {
-        const patchData = JSON.parse(fs.readFileSync(result.filePaths[0], 'utf-8'));
-        await reconstructPatch(patchData);
-    }
+  if (!result.canceled && result.filePaths.length > 0) {
+    const patchData = JSON.parse(fs.readFileSync(result.filePaths[0], 'utf-8'));
+    await reconstructPatch(patchData);
+  }
 }
 
 async function reconstructPatch(patchData) {
-    console.log("Patch data modules received:", patchData.modules);
-    // Desconectar y eliminar todos los módulos no permanentes
-    modules.filter(m => !m.isPermanent).forEach(m => m.disconnect && m.disconnect());
-    let permanentModules = modules.filter(m => m.isPermanent);
-    permanentModules = permanentModules.filter(m => m !== null && m !== undefined);
-    modules = [...permanentModules];
-    connections = [];
-    selectedModule = null;
+  // Clear existing modules (except permanent ones)
+  modules.filter(m => !m.isPermanent).forEach(m => m.disconnect && m.disconnect());
+  modules = modules.filter(m => m.isPermanent);
+  connections = [];
+  selectedModule = null;
+  selectedConnection = null;
 
-    console.log("Permanent modules before processing patch data:", permanentModules);
+  // Create new modules
+  const modulePromises = patchData.modules.map(async (moduleState) => {
+    if (moduleState.isPermanent) return null;
+    
+    const ModuleClass = MODULE_CLASSES[moduleState.type];
+    if (!ModuleClass) {
+      console.warn(`Module class not found for type: ${moduleState.type}`);
+      return null;
+    }
 
-    const modulePromises = patchData.modules.map(async (moduleState) => {
-        if (moduleState.isPermanent) {
-            const existingModule = permanentModules.find(m => m.id === moduleState.id);
-            if (existingModule && existingModule.setState) {
-                existingModule.setState(moduleState);
-            }
-            return null; // Do not add permanent modules to loadedModules
-        }
-        if (!moduleState.type) {
-            console.warn("Module state has no type, skipping:", moduleState);
-            return null;
-        }
-        const ModuleClass = MODULE_CLASSES[moduleState.type];
-        if (ModuleClass) {
-            const newModule = new ModuleClass(moduleState.x, moduleState.y, moduleState.id, moduleState);
-            if (newModule.readyPromise) await newModule.readyPromise;
-            
-            // ASIGNAR CALLBACKS AL CARGAR PATCH
-            if (newModule.type === 'Sequencer') {
-                setupSequencerCallbacks(newModule);
-            }
-            
-            return newModule;
-        }
-        console.warn("Module class not found for type:", moduleState.type, "Skipping module:", moduleState);
-        return null;
+    const newModule = new ModuleClass(moduleState.x, moduleState.y, moduleState.id, moduleState);
+    
+    if (newModule.readyPromise) {
+      await newModule.readyPromise;
+    }
+
+    if (newModule.type === 'Sequencer') {
+      setupSequencerCallbacks(newModule);
+    }
+
+    return newModule;
+  });
+
+  const loadedModules = (await Promise.all(modulePromises)).filter(m => m);
+  modules = [...modules, ...loadedModules];
+
+  // Recreate connections
+  const moduleMap = new Map(modules.map(m => [m.id, m]));
+  
+  patchData.connections.forEach(connData => {
+    const fromModule = moduleMap.get(connData.fromId);
+    const toModule = moduleMap.get(connData.toId);
+
+    if (!fromModule || !toModule) {
+      console.warn('Module not found for connection:', connData);
+      return;
+    }
+    
+    const fromConnector = fromModule.outputs?.[connData.fromConnector];
+    const toConnector = toModule.inputs?.[connData.toConnector];
+    
+    if (!fromConnector || !toConnector) {
+      console.warn('Connector not found for connection:', connData);
+      return;
+    }
+
+    if (fromConnector.source && toConnector.target) {
+      connectNodes(fromConnector.source, toConnector);
+    }
+
+    connections.push({
+      fromModule, 
+      toModule,
+      fromConnector: { name: connData.fromConnector, props: fromConnector },
+      toConnector: { name: connData.toConnector, props: toConnector },
+      type: fromConnector.type
     });
-
-    const loadedModules = (await Promise.all(modulePromises)).filter(m => m);
-    console.log("Loaded modules from patch data (after filtering nulls):", loadedModules);
-
-    modules = [...permanentModules, ...loadedModules];
-    console.log("Final modules array after reconstructPatch:", modules);
-
-    const moduleMap = new Map(modules.map(m => [m.id, m]));
-
-    patchData.connections.forEach(connData => {
-        const fromModule = moduleMap.get(String(connData.fromId));
-        const toModule = moduleMap.get(String(connData.toId));
-
-        if (!fromModule || !toModule) {
-            console.warn('Módulo no encontrado para la conexión:', connData);
-            return;
-        }
-        
-        const fromConnector = fromModule.outputs[connData.fromConnector];
-        const toConnector = toModule.inputs[connData.toConnector];
-        
-        if (!fromConnector || !toConnector) {
-            console.warn('Conector no encontrado para la conexión:', connData);
-            return;
-        }
-
-        if (fromConnector.source && toConnector.target) {
-            connectNodes(fromConnector.source, toConnector);
-        }
-
-        connections.push({
-            fromModule, toModule,
-            fromConnector: { name: connData.fromConnector, props: fromConnector },
-            toConnector: { name: connData.toConnector, props: toConnector },
-            type: fromConnector.type
-        });
-    });
+  });
 }
 
 function setupSequencerCallbacks(sequencerModule) {
-    sequencerModule.onGateOn = () => {
-        const now = audioContext.currentTime;
-        console.log(`[Renderer] Sequencer Gate ON. Time: ${now}`);
-        connections.forEach(conn => {
-            if (conn.fromModule === sequencerModule && conn.fromConnector.name === 'Gate Out') {
-                if (conn.toModule.triggerOn) {
-                    console.log(`[Renderer] Triggering ON for ${conn.toModule.type} (${conn.toModule.id})`);
-                    conn.toModule.triggerOn(now);
-                }
-            }
-        });
-    };
-    sequencerModule.onGateOff = () => {
-        const now = audioContext.currentTime;
-        console.log(`[Renderer] Sequencer Gate OFF. Time: ${now}`);
-        connections.forEach(conn => {
-            if (conn.fromModule === sequencerModule && conn.fromConnector.name === 'Gate Out') {
-                if (conn.toModule.triggerOff) {
-                    console.log(`[Renderer] Triggering OFF for ${conn.toModule.type} (${conn.toModule.id})`);
-                    conn.toModule.triggerOff(now);
-                }
-            }
-        });
-    };
+  sequencerModule.onGateOn = () => {
+    const now = audioContext.currentTime;
+    connections.forEach(conn => {
+      if (conn.fromModule === sequencerModule && conn.fromConnector.name === 'Gate Out') {
+        if (conn.toModule.triggerOn) {
+          conn.toModule.triggerOn(now);
+        }
+      }
+    });
+  };
+  
+  sequencerModule.onGateOff = () => {
+    const now = audioContext.currentTime;
+    connections.forEach(conn => {
+      if (conn.fromModule === sequencerModule && conn.fromConnector.name === 'Gate Out') {
+        if (conn.toModule.triggerOff) {
+          conn.toModule.triggerOff(now);
+        }
+      }
+    });
+  };
 }
 
-function setupEventListeners() {
-    canvas.addEventListener('mousedown', onMouseDown);
-    canvas.addEventListener('mousemove', onMouseMove);
-    canvas.addEventListener('mouseup', onMouseUp);
-    canvas.addEventListener('contextmenu', onContextMenu);
+// Interaction functions
+function getModuleAt(x, y) {
+  return [...modules].reverse().find(m => 
+    x >= m.x && x <= m.x + m.width && 
+    y >= m.y && y <= m.y + m.height
+  );
+}
+
+function getModuleAndConnectorAt(x, y) {
+  for (const module of [...modules].reverse()) {
+    const connector = module.getConnectorAt?.(x, y);
+    if (connector) return { module, connector };
+  }
+  return null;
+}
+
+function getConnectionAt(x, y) {
+  const threshold = 10 / view.zoom;
+  
+  for (const conn of connections) {
+    const fromPos = { 
+      x: conn.fromModule.x + conn.fromConnector.props.x, 
+      y: conn.fromModule.y + conn.fromConnector.props.y 
+    };
+    const toPos = { 
+      x: conn.toModule.x + conn.toConnector.props.x, 
+      y: conn.toModule.y + conn.toConnector.props.y 
+    };
+    
+    const dist = Math.sqrt(Math.pow(toPos.x - fromPos.x, 2) + Math.pow(toPos.y - fromPos.y, 2));
+    const droop = Math.min(100, dist * 0.4);
+
+    const cp1 = {
+      x: fromPos.x + (conn.fromConnector.props.orientation === 'horizontal' ? droop : 0),
+      y: fromPos.y + (conn.fromConnector.props.orientation === 'vertical' ? droop : 0)
+    };
+    const cp2 = {
+      x: toPos.x - (conn.toConnector.props.orientation === 'horizontal' ? droop : 0),
+      y: toPos.y + (conn.toConnector.props.orientation === 'vertical' ? droop : 0)
+    };
+
+    // Check points along the curve
+    for (let t = 0.05; t <= 0.95; t += 0.05) {
+      const tx = Math.pow(1-t, 3)*fromPos.x + 3*Math.pow(1-t,2)*t*cp1.x + 3*(1-t)*Math.pow(t,2)*cp2.x + Math.pow(t,3)*toPos.x;
+      const ty = Math.pow(1-t, 3)*fromPos.y + 3*Math.pow(1-t,2)*t*cp1.y + 3*(1-t)*Math.pow(t,2)*cp2.y + Math.pow(t,3)*toPos.y;
+      
+      if (Math.sqrt(Math.pow(x - tx, 2) + Math.pow(y - ty, 2)) < threshold) {
+        return conn;
+      }
+    }
+  }
+  return null;
+}
+
+async function addModule(type, x, y) {
+  const ModuleClass = MODULE_CLASSES[type];
+  if (!ModuleClass) {
+    console.warn(`Module type not found: ${type}`);
+    return;
+  }
+
+  const newModule = new ModuleClass(x, y);
+  
+  if (newModule.readyPromise) {
+    await newModule.readyPromise;
+  }
+
+  if (newModule.type === 'Sequencer') {
+    setupSequencerCallbacks(newModule);
+  }
+
+  modules.push(newModule);
+  selectedModule = newModule;
+}
+
+// Event handlers
+function onMouseDown(e) {
+  e.preventDefault();
+  mousePos = { x: e.clientX, y: e.clientY };
+  const worldPos = screenToWorld(mousePos.x, mousePos.y);
+
+  if (e.button === 1 || e.altKey) { 
+    isPanning = true; 
+    lastMousePos = mousePos; 
+    canvas.classList.add('grabbing');
+    return; 
+  }
+
+  if (e.button === 0) {
+    patchContextMenu.style.display = 'none';
+    const connectorHit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
+    
+    if (connectorHit && connectorHit.connector.type === 'output') {
+      isPatching = true;
+      patchStart = {
+        x: connectorHit.module.x + connectorHit.connector.props.x,
+        y: connectorHit.module.y + connectorHit.connector.props.y,
+        module: connectorHit.module,
+        connector: connectorHit.connector
+      };
+      return;
+    }
+
+    const moduleHit = getModuleAt(worldPos.x, worldPos.y);
+    if (moduleHit) {
+      selectedModule = moduleHit;
+      selectedConnection = null;
+      
+      if (moduleHit.checkInteraction?.(worldPos)) {
+        interactingModule = moduleHit;
+        return;
+      }
+      
+      if (moduleHit.handleClick?.(worldPos.x, worldPos.y)) {
+        return;
+      }
+      
+      draggingModule = moduleHit;
+      dragOffset.x = worldPos.x - moduleHit.x;
+      dragOffset.y = worldPos.y - moduleHit.y;
+      return;
+    }
+    
+    const connectionHit = getConnectionAt(worldPos.x, worldPos.y);
+    if (connectionHit) {
+      selectedConnection = connectionHit;
+      selectedModule = null;
+      return;
+    }
+
+    selectedModule = null;
+    selectedConnection = null;
+    isPanning = true;
+    lastMousePos = mousePos;
+    canvas.classList.add('grabbing');
+  }
+}
+
+function onMouseMove(e) {
+  e.preventDefault();
+  mousePos = { x: e.clientX, y: e.clientY };
+  const worldPos = screenToWorld(mousePos.x, mousePos.y);
+  
+  // Update hover state
+  const hit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
+  hoveredConnectorInfo = hit;
+  canvas.style.cursor = hit ? 'pointer' : (isPanning ? 'grabbing' : 'grab');
+
+  if (draggingModule) {
+    draggingModule.x = worldPos.x - dragOffset.x;
+    draggingModule.y = worldPos.y - dragOffset.y;
+  } 
+  else if (interactingModule?.handleDragInteraction) {
+    interactingModule.handleDragInteraction(worldPos);
+  } 
+  else if (isPanning) {
+    view.x += e.movementX;
+    view.y += e.movementY;
+  }
+}
+
+function onMouseUp(e) {
+  e.preventDefault();
+  canvas.classList.remove('grabbing');
+  canvas.style.cursor = 'grab';
+
+  if (interactingModule?.endInteraction) {
+    interactingModule.endInteraction();
+  }
+
+  if (isPatching) {
+    const worldPos = screenToWorld(mousePos.x, mousePos.y);
+    const hit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
+    
+    if (hit && hit.connector.type === 'input') {
+      const outputType = patchStart.connector.props.type;
+      const inputType = hit.connector.props.type;
+      
+      // Check compatibility
+      const isCompatible = (
+        outputType === inputType || 
+        (outputType === 'audio' && inputType === 'cv') ||
+        (outputType === 'cv' && inputType === 'gate') ||
+        (outputType === 'gate' && inputType === 'gate')
+      );
+      
+      const isOscilloscopeInput = hit.module.type === 'Osciloscopio' && 
+                                 (outputType === 'audio' || outputType === 'cv');
+
+      if (isCompatible || isOscilloscopeInput) {
+        if (patchStart.connector.props.source && hit.connector.props.target) {
+          connectNodes(patchStart.connector.props.source, hit.connector.props);
+        }
+
+        connections.push({
+          fromModule: patchStart.module,
+          fromConnector: patchStart.connector,
+          toModule: hit.module,
+          toConnector: hit.connector,
+          type: patchStart.connector.props.type
+        });
+      }
+    }
+  }
+  
+  // Reset interaction states
+  draggingModule = null;
+  isPatching = false;
+  patchStart = null;
+  isPanning = false;
+  interactingModule = null;
+}
+
+function onContextMenu(e) {
+  e.preventDefault();
+  const worldPos = screenToWorld(e.clientX, e.clientY);
+  
+  // Don't show menu if clicking on a module
+  if (getModuleAt(worldPos.x, worldPos.y)) return;
+
+  contextMenu.style.left = `${e.clientX}px`;
+  contextMenu.style.top = `${e.clientY}px`;
+  contextMenu.style.display = 'block';
+}
+
+function onKeyDown(e) {
+  if (e.target.tagName === 'INPUT') return;
+  
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    deleteSelection();
+  }
+  
+  const keyboardModule = modules.find(m => m instanceof Keyboard);
+  if (keyboardModule) {
+    const isNewPress = keyboardModule.activeKeys.size === 0;
+    keyboardModule.handleKeyDown(e.key.toLowerCase());
+    
+    if (isNewPress) {
+      const now = audioContext.currentTime;
+      connections.forEach(conn => {
+        if (conn.fromModule === keyboardModule && conn.fromConnector.name === 'DISPARO') {
+          if (conn.toModule.triggerOn) {
+            conn.toModule.triggerOn(now);
+          }
+        }
+      });
+    }
+  }
+}
+
+function onKeyUp(e) {
+  if (e.target.tagName === 'INPUT') return;
+  
+  const keyboardModule = modules.find(m => m instanceof Keyboard);
+  if (keyboardModule) {
+    keyboardModule.handleKeyUp(e.key.toLowerCase());
+    
+    if (keyboardModule.activeKeys.size === 0) {
+      const now = audioContext.currentTime;
+      connections.forEach(conn => {
+        if (conn.fromModule === keyboardModule && conn.fromConnector.name === 'DISPARO') {
+          if (conn.toModule.triggerOff) {
+            conn.toModule.triggerOff(now);
+          }
+        }
+      });
+    }
+  }
+}
+
+function onWheel(e) {
+  e.preventDefault();
+  const worldPos = screenToWorld(e.clientX, e.clientY);
+  const zoomAmount = e.deltaY < 0 ? 1.1 : 1/1.1;
+  const newZoom = Math.max(view.minZoom, Math.min(view.maxZoom, view.zoom * zoomAmount));
+  
+  view.x = e.clientX - worldPos.x * newZoom;
+  view.y = e.clientY - worldPos.y * newZoom;
+  view.zoom = newZoom;
+}
+
+// Setup function
+async function setup() {
+  try {
+    await initAudioContext();
+    
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Add keyboard
+    const keyboard = new Keyboard(canvas.width / 2 - 125, canvas.height - 150, 'keyboard-main');
+    modules.push(keyboard);
+
+    // Add master output
+    const outputModule = {
+      id: 'output-main',
+      x: canvas.width / 2 - 50, 
+      y: 50, 
+      width: 100, 
+      height: 80, 
+      isPermanent: true, 
+      type: 'Output',
+      inputs: { 
+        'audio': { 
+          x: 0, 
+          y: 40, 
+          type: 'audio', 
+          target: audioContext.destination, 
+          orientation: 'horizontal' 
+        } 
+      },
+      outputs: {},
+      draw: function(ctx, isSelected) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.strokeStyle = isSelected ? '#aaffff' : '#888';
+        ctx.lineWidth = 2;
+        ctx.fillRect(0, 0, this.width, this.height);
+        ctx.strokeRect(0, 0, this.width, this.height);
+        ctx.fillStyle = '#E0E0E0';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('SALIDA', this.width / 2, this.height / 2 + 5);
+        ctx.restore();
+      },
+      getConnectorAt: function(x, y) {
+        for (const [name, props] of Object.entries(this.inputs)) {
+          const dist = Math.sqrt(
+            Math.pow(x - (this.x + props.x), 2) + 
+            Math.pow(y - (this.y + props.y), 2)
+          );
+          if (dist < 9) return { name, type: 'input', props, module: this };
+        }
+        return null;
+      },
+      getState: function() {
+        return { 
+          id: this.id, 
+          type: this.type, 
+          x: this.x, 
+          y: this.y, 
+          isPermanent: this.isPermanent 
+        };
+      },
+      setState: function(state) {
+        this.x = state.x;
+        this.y = state.y;
+      }
+    };
+    modules.push(outputModule);
+
+    // Setup event listeners
+    canvas.addEventListener('mousedown', onMouseDown, { passive: false });
+    canvas.addEventListener('mousemove', onMouseMove, { passive: false });
+    canvas.addEventListener('mouseup', onMouseUp, { passive: false });
+    canvas.addEventListener('contextmenu', onContextMenu, { passive: false });
     canvas.addEventListener('wheel', onWheel, { passive: false });
+    
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
+    
     document.getElementById('save-patch-btn').addEventListener('click', savePatch);
     document.getElementById('load-patch-btn').addEventListener('click', loadPatch);
     
     document.querySelectorAll('#context-menu .context-menu-item').forEach(item => {
-        item.addEventListener('click', (e) => {
-            const moduleType = e.target.getAttribute('data-module');
-            const worldPos = screenToWorld(parseFloat(contextMenu.style.left.slice(0,-2)), parseFloat(contextMenu.style.top.slice(0,-2))); // Parsear a número
-            addModule(moduleType, worldPos.x, worldPos.y);
-            contextMenu.style.display = 'none';
-        });
+      item.addEventListener('click', async (e) => { // Marcado como async
+        const moduleType = e.target.getAttribute('data-module');
+        const worldPos = screenToWorld(
+          parseFloat(contextMenu.style.left.slice(0, -2)), 
+          parseFloat(contextMenu.style.top.slice(0, -2))
+        );
+        await addModule(moduleType, worldPos.x, worldPos.y); // Esperar la promesa
+        contextMenu.style.display = 'none';
+      });
     });
+
     window.addEventListener('click', (e) => {
-        if (!patchContextMenu.contains(e.target)) {
-            patchContextMenu.style.display = 'none';
-        }
-        if (!contextMenu.contains(e.target)) {
-            contextMenu.style.display = 'none';
-        }
-    });
-
-    window.addEventListener('resize', () => { // Añadir listener de redimensionamiento de ventana
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    });
-}
-
-async function addModule(type, x, y) {
-    const ModuleClass = MODULE_CLASSES[type];
-    if (ModuleClass) {
-        const newModule = new ModuleClass(x, y);
-        if (newModule.readyPromise) {
-            await newModule.readyPromise;
-        }
-
-        if (newModule.type === 'Sequencer') {
-            setupSequencerCallbacks(newModule);
-        }
-
-        modules.push(newModule);
-        selectedModule = newModule;
-    }
-}
-
-function getModuleAt(x, y) {
-    return [...modules].reverse().find(m => x >= m.x && x <= m.x + m.width && y >= m.y && y <= m.y + m.height);
-}
-
-function getModuleAndConnectorAt(x, y) {
-    for (const module of [...modules].reverse()) {
-        const connector = module.getConnectorAt(x, y);
-        if (connector) return { module, connector };
-    }
-    return null;
-}
-
-function showPatchContextMenu(e) {
-    const outputType = patchStart.connector.props.type;
-    const compatibleInputs = [];
-
-    modules.forEach(module => {
-        if (module === patchStart.module) return;
-        Object.entries(module.inputs).forEach(([name, props]) => {
-            // Modificar la compatibilidad para incluir osciloscopios
-            const isCompatible = (outputType === props.type) || 
-                                 (outputType === 'audio' && props.type === 'cv') ||
-                                 (outputType === 'cv' && props.type === 'gate') ||
-                                 (outputType === 'gate' && props.type === 'gate');
-            
-            // Un osciloscopio solo tiene una entrada de audio/CV
-            if (module.type === 'Osciloscopio' && props.type === 'audio') {
-                 if (outputType === 'audio' || outputType === 'cv') { // Osciloscopio puede tomar audio o CV
-                     compatibleInputs.push({ module, connectorName: name, connectorProps: props });
-                 }
-            } else if (isCompatible) {
-                compatibleInputs.push({ module, connectorName: name, connectorProps: props });
-            }
-        });
-    });
-
-    patchContextMenu.innerHTML = '';
-    if (compatibleInputs.length === 0) {
-        const item = document.createElement('div');
-        item.className = 'context-menu-item';
-        item.textContent = 'No hay entradas compatibles';
-        item.style.color = '#888';
-        patchContextMenu.appendChild(item);
-    } else {
-        compatibleInputs.forEach(hit => {
-            const item = document.createElement('div');
-            item.className = 'context-menu-item';
-            const moduleName = hit.module.type || 'Módulo';
-            item.textContent = `Conectar a: ${moduleName} -> ${hit.connectorName}`;
-            item.onclick = () => {
-                if (patchStart.connector.props.type === 'gate') {
-                    if (patchStart.module.connectGate) patchStart.module.connectGate(hit.module);
-                } else {
-                    connectNodes(patchStart.connector.props.source, hit.connectorProps);
-                }
-                connections.push({
-                    fromModule: patchStart.module, fromConnector: patchStart.connector,
-                    toModule: hit.module, toConnector: { name: hit.connectorName, props: hit.connectorProps },
-                    type: patchStart.connector.props.type
-                });
-                patchContextMenu.style.display = 'none';
-            };
-            patchContextMenu.appendChild(item);
-        });
-    }
-
-    patchContextMenu.style.left = `${e.clientX}px`;
-    patchContextMenu.style.top = `${e.clientY}px`;
-    patchContextMenu.style.display = 'block';
-}
-
-function onMouseDown(e) {
-    mousePos = { x: e.clientX, y: e.clientY };
-    const worldPos = screenToWorld(mousePos.x, mousePos.y);
-    if (e.button === 1 || e.altKey) { isPanning = true; lastMousePos = mousePos; return; }
-
-    if (e.button === 0) {
+      if (!contextMenu.contains(e.target)) {
+        contextMenu.style.display = 'none';
+      }
+      if (!patchContextMenu.contains(e.target)) {
         patchContextMenu.style.display = 'none';
-        const connectorHit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
-        if (connectorHit && connectorHit.connector.type === 'output') {
-            isPatching = true;
-            patchStart = {
-                x: connectorHit.module.x + connectorHit.connector.props.x, y: connectorHit.module.y + connectorHit.connector.props.y,
-                module: connectorHit.module, connector: connectorHit.connector
-            };
-            return;
-        }
+      }
+    });
 
-        const moduleHit = getModuleAt(worldPos.x, worldPos.y);
-        if (moduleHit) {
-            selectedModule = moduleHit;
-            selectedConnection = null; // Deseleccionar cable al seleccionar módulo
-            if (moduleHit.checkInteraction && moduleHit.checkInteraction(worldPos)) {
-                interactingModule = moduleHit;
-                return;
-            }
-            if (moduleHit.handleClick && moduleHit.handleClick(worldPos.x, worldPos.y)) {
-                // No es necesario un log para cada click, pero si se quisiera, sería así:
-                // console.log(`handleClick called for module ${moduleHit.id}`);
-                return;
-            }
-            draggingModule = moduleHit;
-            dragOffset.x = worldPos.x - moduleHit.x;
-            dragOffset.y = worldPos.y - moduleHit.y;
-            return;
-        }
-        
-        const connectionHit = getConnectionAt(worldPos.x, worldPos.y);
-        if (connectionHit) {
-            selectedConnection = connectionHit;
-            selectedModule = null;
-            return;
-        }
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
 
-        selectedModule = null;
-        selectedConnection = null; // Deseleccionar todo al pinchar en el fondo
-        isPanning = true;
-        lastMousePos = mousePos;
-        canvas.classList.add('grabbing');
-    }
-}
-
-function onMouseMove(e) {
-    mousePos = { x: e.clientX, y: e.clientY };
-    const worldPos = screenToWorld(mousePos.x, mousePos.y);
-    const hit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
-    hoveredConnectorInfo = hit;
-    canvas.style.cursor = hit ? 'pointer' : (isPanning || canvas.classList.contains('grabbing') ? 'grabbing' : 'grab');
-
-    if (draggingModule) {
-        const newX = worldPos.x - dragOffset.x;
-        const newY = worldPos.y - dragOffset.y;
-        draggingModule.x = newX;
-        draggingModule.y = newY;
-    } else if (interactingModule && interactingModule.handleDragInteraction) {
-        if (interactingModule.type === 'Mixer') {
-            interactingModule.handleDragInteraction(e.movementX, e.movementY, e.shiftKey);
-        } else {
-            interactingModule.handleDragInteraction(worldPos);
-        }
-    } else if (isPanning) {
-        view.x += e.movementX;
-        view.y += e.movementY;
-    }
-}
-
-function onMouseUp(e) {
-    canvas.classList.remove('grabbing');
-    canvas.style.cursor = 'grab';
-
-    if (interactingModule && interactingModule.endInteraction) { interactingModule.endInteraction(); }
-
-    if (isPatching) {
-        const worldPos = screenToWorld(mousePos.x, mousePos.y);
-        const hit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
-        
-        if (hit && hit.connector.type === 'input') {
-            const outputType = patchStart.connector.props.type;
-            const inputType = hit.connector.props.type;
-            const isCompatible = (outputType === inputType) || 
-                                 (outputType === 'audio' && inputType === 'cv') ||
-                                 (outputType === 'cv' && inputType === 'gate') ||
-                                 (outputType === 'gate' && inputType === 'gate');
-            
-            const isOscilloscopeInput = hit.module.type === 'Osciloscopio' && hit.connector.name === 'input';
-            const canConnectToOscilloscope = isOscilloscopeInput && (outputType === 'audio' || outputType === 'cv');
-
-            if (isCompatible || canConnectToOscilloscope) {
-                // Lóxica de conexión de nodos de audio unificada
-                if (patchStart.connector.props.source && hit.connector.props.target) {
-                    connectNodes(patchStart.connector.props.source, hit.connector.props);
-                }
-
-                connections.push({
-                    fromModule: patchStart.module, fromConnector: patchStart.connector,
-                    toModule: hit.module, toConnector: hit.connector,
-                    type: patchStart.connector.props.type
-                });
-                console.log(`Connection established: ${patchStart.module.type}.${patchStart.connector.name} -> ${hit.module.type}.${hit.connector.name}`);
-            }
-        } else if (!getModuleAt(worldPos.x, worldPos.y)) {
-            showPatchContextMenu(e);
-        }
-    }
+    // Start drawing
+    draw();
     
-    draggingModule = null; isPatching = false; patchStart = null; isPanning = false; interactingModule = null;
+  } catch (error) {
+    console.error('Error during setup:', error);
+  }
 }
 
-function onContextMenu(e) {
-    e.preventDefault();
-    contextMenu.style.left = `${e.clientX}px`;
-    contextMenu.style.top = `${e.clientY}px`;
-    contextMenu.style.display = 'block';
-}
-
-function onKeyDown(e) {
-    if (e.target.tagName === 'INPUT') return;
-    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelection(); }
-    
-    const keyboardModule = modules.find(m => m instanceof Keyboard);
-    if (keyboardModule && !interactingModule) {
-        const isNewPress = keyboardModule.activeKeys.size === 0;
-        keyboardModule.handleKeyDown(e.key.toLowerCase());
-        
-        // Se é a primeira tecla que se pulsa, disparar o gate ON
-        if (isNewPress && keyboardModule.activeKeys.size === 1) {
-            const now = audioContext.currentTime;
-            connections.forEach(conn => {
-                if (conn.fromModule === keyboardModule && conn.fromConnector.name === 'DISPARO') {
-                    if (conn.toModule.triggerOn) {
-                        conn.toModule.triggerOn(now);
-                    }
-                }
-            });
-        }
-    }
-}
-
-function onKeyUp(e) {
-    if (e.target.tagName === 'INPUT') return;
-    const keyboardModule = modules.find(m => m instanceof Keyboard);
-    if (keyboardModule) {
-        const wasPressed = keyboardModule.activeKeys.size > 0;
-        keyboardModule.handleKeyUp(e.key.toLowerCase());
-
-        // Se non quedan teclas pulsadas, disparar o gate OFF
-        if (wasPressed && keyboardModule.activeKeys.size === 0) {
-            const now = audioContext.currentTime;
-            connections.forEach(conn => {
-                if (conn.fromModule === keyboardModule && conn.fromConnector.name === 'DISPARO') {
-                    if (conn.toModule.triggerOff) {
-                        conn.toModule.triggerOff(now);
-                    }
-                }
-            });
-        }
-    }
-} 
-
-function onWheel(e) {
-    e.preventDefault();
-    const worldPos = screenToWorld(e.clientX, e.clientY);
-    const zoomAmount = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    const newZoom = Math.max(view.minZoom, Math.min(view.maxZoom, view.zoom * zoomAmount));
-    view.x = e.clientX - worldPos.x * newZoom;
-    view.y = e.clientY - worldPos.y * newZoom;
-    view.zoom = newZoom;
-}
-
-function getPointOnBezier(t, p0, p1, cp1, cp2) {
-    const c = (1 - t);
-    const b0 = c * c * c;
-    const b1 = 3 * c * c * t;
-    const b2 = 3 * c * t * t;
-    const b3 = t * t * t;
-    const x = b0 * p0.x + b1 * cp1.x + b2 * cp2.x + b3 * p1.x;
-    const y = b0 * p0.y + b1 * cp1.y + b2 * cp2.y + b3 * p1.y;
-    return { x, y };
-}
-
-function getConnectionAt(x, y) {
-    const threshold = 10 / view.zoom; // Aumentado de 6 a 10 para facilitar la selección
-    for (const conn of connections) {
-        const fromPos = { x: conn.fromModule.x + conn.fromConnector.props.x, y: conn.fromModule.y + conn.fromConnector.props.y };
-        const toPos = { x: conn.toModule.x + conn.toConnector.props.x, y: conn.toModule.y + conn.toConnector.props.y };
-        
-        const dist = Math.sqrt(Math.pow(toPos.x - fromPos.x, 2) + Math.pow(toPos.y - fromPos.y, 2));
-        const droop = Math.min(100, dist * 0.4);
-
-        const cp1 = {
-            x: fromPos.x + (conn.fromConnector.props.orientation === 'horizontal' ? droop : 0),
-            y: fromPos.y + (conn.fromConnector.props.orientation === 'vertical' ? droop : 0)
-        };
-        const cp2 = {
-            x: toPos.x - (conn.toConnector.props.orientation === 'horizontal' ? droop : 0),
-            y: toPos.y + (conn.toConnector.props.orientation === 'vertical' ? droop : 0)
-        };
-
-        for (let t = 0.05; t <= 0.95; t += 0.05) {
-            const p = getPointOnBezier(t, fromPos, toPos, cp1, cp2);
-            const distToPoint = Math.sqrt(Math.pow(x - p.x, 2) + Math.pow(y - p.y, 2));
-            if (distToPoint < threshold) {
-                return conn;
-            }
-        }
-    }
-    return null;
-}
-
+// Start the application
 setup();

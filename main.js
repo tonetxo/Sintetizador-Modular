@@ -11,14 +11,29 @@ function createWindow() {
       nodeIntegration: true,
       contextIsolation: false,
       enableRemoteModule: true,
+      webSecurity: true,
+      sandbox: false
     },
     backgroundColor: '#333333'
   });
-  
-  require("@electron/remote/main").enable(mainWindow.webContents);
 
+  // Configurar CSP
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self' 'unsafe-inline'",
+          "script-src 'self' 'unsafe-eval'",
+          "style-src 'self' 'unsafe-inline'",
+          "img-src 'self' data:"
+        ]
+      }
+    });
+  });
+
+  require("@electron/remote/main").enable(mainWindow.webContents);
   mainWindow.loadFile('index.html');
-  // mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {

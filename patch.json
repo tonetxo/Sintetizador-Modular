@@ -3,122 +3,136 @@
     {
       "id": "keyboard-main",
       "type": "Keyboard",
-      "x": 397.5,
+      "x": 490,
       "y": 725,
       "isPermanent": true
     },
     {
       "id": "output-main",
       "type": "Output",
-      "x": 472.5,
+      "x": 565,
       "y": 50,
       "isPermanent": true
     },
     {
-      "id": "vco-1753859657036",
+      "id": "vco-1753909969657",
       "type": "VCO",
-      "x": 141,
-      "y": 223,
+      "x": 337.9999999999999,
+      "y": 160.00000000000003,
       "waveform": "sawtooth",
       "detuneValue": 0
     },
     {
-      "id": "vcf-1753859663488",
-      "type": "VCF",
-      "x": 356,
-      "y": 325,
-      "cutoff": 1000,
-      "resonance": 1,
-      "filterType": "lowpass"
-    },
-    {
-      "id": "vca-1753859665792",
-      "type": "VCA",
-      "x": 619,
-      "y": 367
-    },
-    {
-      "id": "adsr-1753859678938",
+      "id": "adsr-1753909971685",
       "type": "ADSR",
-      "x": 419,
-      "y": 539,
-      "params": {
-        "attack": 0.1,
-        "decay": 0.2,
-        "sustain": 0.6,
-        "release": 0.5
-      }
+      "x": 594.9999999999999,
+      "y": 342,
+      "attack": 0.01,
+      "decay": 0.1,
+      "sustain": 0.8,
+      "release": 0.2
     },
     {
-      "id": "lfo-1753863436880",
-      "type": "LFO",
-      "x": 132,
-      "y": 565,
-      "rate": 8,
-      "depth": 3,
-      "waveform": "sine"
+      "id": "vca-1753909974342",
+      "type": "VCA",
+      "x": 881.9999999999999,
+      "y": 128
     },
     {
-      "id": "osc-1753863450960",
-      "type": "Osciloscopio",
-      "x": 816,
-      "y": 308
+      "id": "sequencer-1753980160303",
+      "type": "Sequencer",
+      "x": -140.22264996802187,
+      "y": 413.1698654463492,
+      "tempo": 139.8863636363637,
+      "direction": 1,
+      "steps": 16,
+      "running": false,
+      "sequence": [
+        0.5,
+        0.6580014250144373,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.7364105159235272,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "gateLengths": [
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.574123762038114,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "stepStates": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
     }
   ],
   "connections": [
     {
-      "fromId": "vca-1753859665792",
+      "fromId": "adsr-1753909971685",
+      "fromConnector": "CV",
+      "toId": "vca-1753909974342",
+      "toConnector": "CV 1"
+    },
+    {
+      "fromId": "vco-1753909969657",
+      "fromConnector": "audio",
+      "toId": "vca-1753909974342",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "vca-1753909974342",
       "fromConnector": "audio",
       "toId": "output-main",
       "toConnector": "audio"
     },
     {
-      "fromId": "vcf-1753859663488",
-      "fromConnector": "audio",
-      "toId": "vca-1753859665792",
-      "toConnector": "audio"
-    },
-    {
-      "fromId": "vco-1753859657036",
-      "fromConnector": "audio",
-      "toId": "vcf-1753859663488",
-      "toConnector": "audio"
-    },
-    {
-      "fromId": "keyboard-main",
-      "fromConnector": "DISPARO",
-      "toId": "adsr-1753859678938",
-      "toConnector": "Disparo"
-    },
-    {
-      "fromId": "adsr-1753859678938",
-      "fromConnector": "C.V.",
-      "toId": "vca-1753859665792",
-      "toConnector": "CV 1"
-    },
-    {
-      "fromId": "keyboard-main",
-      "fromConnector": "TENSION",
-      "toId": "vco-1753859657036",
+      "fromId": "sequencer-1753980160303",
+      "fromConnector": "CV Out",
+      "toId": "vco-1753909969657",
       "toConnector": "1V/Oct"
     },
     {
-      "fromId": "lfo-1753863436880",
-      "fromConnector": "SALIDA",
-      "toId": "vco-1753859657036",
-      "toConnector": "FM"
-    },
-    {
-      "fromId": "keyboard-main",
-      "fromConnector": "DISPARO",
-      "toId": "lfo-1753863436880",
+      "fromId": "sequencer-1753980160303",
+      "fromConnector": "Gate Out",
+      "toId": "adsr-1753909971685",
       "toConnector": "Gate"
-    },
-    {
-      "fromId": "vca-1753859665792",
-      "fromConnector": "audio",
-      "toId": "osc-1753863450960",
-      "toConnector": "input"
     }
   ]
 }

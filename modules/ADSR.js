@@ -26,10 +26,10 @@ export class ADSR {
         cvOutput.gain.value = 0; // Comeza en silencio
         
         // Conectar a unha fonte constante de 1.0 para que o Gain controle o nivel
-        const constantSource = audioContext.createConstantSource();
-        constantSource.offset.value = 1.0;
-        constantSource.start();
-        constantSource.connect(cvOutput);
+        this.constantSource = audioContext.createConstantSource();
+        this.constantSource.offset.value = 1.0;
+        this.constantSource.start();
+        this.constantSource.connect(cvOutput);
 
         this.inputs = {
             'Gate': { x: 0, y: this.height / 2, type: 'gate', orientation: 'horizontal' }
@@ -193,6 +193,13 @@ export class ADSR {
         gain.cancelScheduledValues(now);
         gain.setValueAtTime(gain.value, now);
         gain.linearRampToValueAtTime(0, now + this.params.release);
+    }
+
+    disconnect() {
+        if (this.constantSource && this.outputs.CV.source) {
+            this.constantSource.disconnect(this.outputs.CV.source);
+            this.constantSource.stop();
+        }
     }
 
     getState() {

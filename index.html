@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
     <title>Sintetizador Modular</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -12,7 +13,6 @@
     </div>
     <canvas id="synth-canvas"></canvas>
     
-    <!-- Menú contextual para AÑADIR módulos -->
     <div id="context-menu" class="context-menu">
         <div class="context-menu-item" data-module="VCO">Añadir VCO</div>
         <div class="context-menu-item" data-module="LFO">Añadir LFO</div>
@@ -23,10 +23,12 @@
         <div class="context-menu-item" data-module="RingMod">Añadir Mod. Anillo</div>
         <div class="context-menu-item" data-module="SampleAndHold">Añadir S&H</div>
         <div class="context-menu-item" data-module="Sequencer">Añadir Sequencer</div>
-        <div class="context-menu-item" data-module="Osciloscopio">Añadir Osciloscopio</div> </div>
+        <div class="context-menu-item" data-module="Delay">Añadir Delay</div>
+        <div class="context-menu-item" data-module="Compressor">Añadir Compressor</div>
+        <div class="context-menu-item" data-module="Reverb">Añadir Reverb</div>
+        <div class="context-menu-item" data-module="Osciloscopio">Añadir Osciloscopio</div>
     </div>
 
-    <!-- Menú contextual para CONECTAR cables -->
     <div id="patch-context-menu" class="context-menu"></div>
 
     <script src="renderer.js" type="module"></script>

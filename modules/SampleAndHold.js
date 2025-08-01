@@ -140,5 +140,4 @@ export class SampleAndHold {
         this.x = state.x;
         this.y = state.y;
     }
-    setState(state) { this.x = state.x; this.y = state.y; }
 }
