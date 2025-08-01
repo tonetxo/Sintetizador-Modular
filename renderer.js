@@ -143,37 +143,40 @@ function draw() {
   requestAnimationFrame(draw);
 }
 
-function connectNodes(sourceNode, destConnector) {
-  const target = destConnector.target;
-  if (!target) {
-    console.error("Target node is not ready or does not exist.", destConnector);
+function connectNodes(sourceConnector, destConnector) {
+  const sourceNode = sourceConnector.source;
+  const destNode = destConnector.target;
+  if (!sourceNode || !destNode) {
+    console.error("Source or target node is not ready or does not exist.", { sourceConnector, destConnector });
     return;
   }
 
-  if (sourceNode && target instanceof AnalyserNode) {
-    sourceNode.connect(target);
-  } else if (target instanceof AudioWorkletNode) {
-    sourceNode.connect(target, 0, destConnector.inputIndex);
-  } else if (target instanceof AudioParam) {
-    sourceNode.connect(target);
+  const outputIndex = sourceConnector.port || 0;
+  const inputIndex = destConnector.inputIndex || 0;
+
+  // console.log(`Connecting: ${sourceConnector.name} (out ${outputIndex}) -> ${destConnector.name} (in ${inputIndex})`);
+
+  if (destNode instanceof AudioParam) {
+    sourceNode.connect(destNode, outputIndex);
   } else {
-    sourceNode.connect(target, 0, destConnector.inputIndex || 0);
+    sourceNode.connect(destNode, outputIndex, inputIndex);
   }
 }
 
-function disconnectNodes(sourceNode, destConnector) {
-  const target = destConnector.target;
-  if (!target) return;
+function disconnectNodes(sourceConnector, destConnector) {
+  const sourceNode = sourceConnector.source;
+  const destNode = destConnector.target;
+  if (!sourceNode || !destNode) return;
+
+  const outputIndex = sourceConnector.port || 0;
+  const inputIndex = destConnector.inputIndex || 0;
 
   try {
-    if (sourceNode && target instanceof AnalyserNode) {
-      sourceNode.disconnect(target);
-    } else if (target instanceof AudioWorkletNode) {
-      sourceNode.disconnect(target, 0, destConnector.inputIndex);
-    } else if (target instanceof AudioParam) {
-      sourceNode.disconnect(target);
+    // console.log(`Disconnecting: ${sourceConnector.name} (out ${outputIndex}) -> ${destConnector.name} (in ${inputIndex})`);
+    if (destNode instanceof AudioParam) {
+      sourceNode.disconnect(destNode, outputIndex);
     } else {
-      sourceNode.disconnect(target, 0, destConnector.inputIndex || 0);
+      sourceNode.disconnect(destNode, outputIndex, inputIndex);
     }
   } catch(e) { 
     console.warn("Error disconnecting node:", e); 
@@ -183,16 +186,32 @@ function disconnectNodes(sourceNode, destConnector) {
 function deleteSelection() {
   if (selectedConnection) {
     const conn = selectedConnection;
+    
+    // Limpiar callbacks de mensajes si es una conexión Sequencer -> ADSR
+    if (conn.fromModule.type === 'Sequencer' && conn.toModule.type === 'ADSR' && conn.fromConnector.name === 'DISPARO') {
+        console.log(`[Renderer] Clearing message-based trigger for ${conn.fromModule.id} -> ${conn.toModule.id}`);
+        conn.fromModule.onGateOn = null;
+        conn.fromModule.onGateOff = null;
+    }
+
     if (conn.fromConnector.props.source && conn.toConnector.props.target) {
-      disconnectNodes(conn.fromConnector.props.source, conn.toConnector.props);
+      disconnectNodes(conn.fromConnector.props, conn.toConnector.props);
     }
     connections = connections.filter(c => c !== conn);
     selectedConnection = null;
   } else if (selectedModule && !selectedModule.isPermanent) {
     connections = connections.filter(conn => {
       const shouldRemove = conn.fromModule === selectedModule || conn.toModule === selectedModule;
-      if (shouldRemove && conn.fromConnector.props.source && conn.toConnector.props.target) {
-        disconnectNodes(conn.fromConnector.props.source, conn.toConnector.props);
+      if (shouldRemove) {
+        // Limpiar callbacks de mensajes al eliminar un módulo conectado
+        if (conn.fromModule.type === 'Sequencer' && conn.toModule.type === 'ADSR' && conn.fromConnector.name === 'DISPARO') {
+            console.log(`[Renderer] Clearing message-based trigger for ${conn.fromModule.id} -> ${conn.toModule.id}`);
+            conn.fromModule.onGateOn = null;
+            conn.fromModule.onGateOff = null;
+        }
+        if (conn.fromConnector.props.source && conn.toConnector.props.target) {
+          disconnectNodes(conn.fromConnector.props, conn.toConnector.props);
+        }
       }
       return !shouldRemove;
     });
@@ -290,7 +309,7 @@ async function reconstructPatch(patchData) {
     }
 
     if (fromConnector.source && toConnector.target) {
-      connectNodes(fromConnector.source, toConnector);
+      connectNodes(fromConnector, toConnector);
     }
 
     connections.push({
@@ -496,8 +515,9 @@ function onMouseUp(e) {
                                  (outputType === 'audio' || outputType === 'cv' || outputType === 'gate');
 
       if (isCompatible || isOscilloscopeInput) {
+        // Conexión de audio/CV tradicional
         if (patchStart.connector.props.source && hit.connector.props.target) {
-          connectNodes(patchStart.connector.props.source, hit.connector.props);
+          connectNodes(patchStart.connector.props, hit.connector.props);
         }
 
         connections.push({

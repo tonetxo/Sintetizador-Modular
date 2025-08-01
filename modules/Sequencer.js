@@ -14,7 +14,7 @@ export class Sequencer {
         this.params = {
             tempo: initialState.tempo || 120,
             direction: initialState.direction || 0,
-            steps: initialState.steps || 16,
+            numberOfSteps: initialState.numberOfSteps || 16,
             running: initialState.running !== undefined ? initialState.running : false,
             sequence: initialState.sequence || Array(16).fill(0.5),
             gateLengths: initialState.gateLengths || Array(16).fill(0.8),
@@ -27,9 +27,6 @@ export class Sequencer {
         this.activeControl = null;
         this.currentStep = 0;
         this.lastRunningState = initialState.running !== undefined ? initialState.running : false;
-        
-        this.onGateOn = null;
-        this.onGateOff = null;
 
         this.inputs = {};
         this.outputs = {};
@@ -99,25 +96,39 @@ export class Sequencer {
     }
 
     async updateWorkletState() {
-        // No esperar this.readyPromise aquí, ya que esta función es llamada por initWorklet
-        // y también por setState y handleClick, donde readyPromise ya debería estar resuelta.
         if (!this.workletNode) {
             console.warn(`[Sequencer-${this.id}] updateWorkletState called but workletNode is null.`);
             return;
         }
 
         console.log(`[Sequencer-${this.id}] Updating worklet state. Running: ${this.params.running}`);
+
+        // Ensure parameter values are valid numbers before sending to worklet
+        const tempo = Number(this.params.tempo);
+        const direction = Number(this.params.direction);
+        const steps = Number(this.params.numberOfSteps);
+
+        if (!isFinite(tempo) || !isFinite(direction) || !isFinite(steps)) {
+            console.error(`[Sequencer-${this.id}] Attempted to send non-finite parameter value.`, {
+                tempo: this.params.tempo,
+                direction: this.params.direction,
+                steps: this.params.numberOfSteps
+            });
+            // Fallback to defaults to prevent crashing
+            this.params.tempo = isFinite(tempo) ? tempo : 120;
+            this.params.direction = isFinite(direction) ? direction : 0;
+            this.params.numberOfSteps = isFinite(steps) ? steps : 16;
+        }
+
         this.workletNode.parameters.get('tempo').setValueAtTime(this.params.tempo, audioContext.currentTime);
         this.workletNode.parameters.get('direction').setValueAtTime(this.params.direction, audioContext.currentTime);
-        this.workletNode.parameters.get('steps').setValueAtTime(this.params.steps, audioContext.currentTime);
+        this.workletNode.parameters.get('steps').setValueAtTime(this.params.numberOfSteps, audioContext.currentTime);
 
-        // Always send the current running state to the worklet
         if (this.params.running) {
             this.workletNode.port.postMessage({ type: 'start' });
         } else {
             this.workletNode.port.postMessage({ type: 'stop' });
         }
-        // Update lastRunningState after sending the message
         this.lastRunningState = this.params.running;
 
         this.workletNode.port.postMessage({ type: 'updateSequence', sequence: this.params.sequence });
@@ -152,7 +163,7 @@ export class Sequencer {
         this.drawKnob(ctx, 'tempo', 'TEMPO', 50, controlsY, 20, 300, this.params.tempo);
         this.drawButton(ctx, 'run/stop', this.params.running ? 'STOP' : 'START', 120, controlsY, 60, 30);
         this.drawSelector(ctx, 'direction', 'DIR', 210, controlsY, 60, 30, this.directionModes[this.params.direction]);
-        this.drawKnob(ctx, 'steps', 'STEPS', 300, controlsY, 1, 16, this.params.steps);
+        this.drawKnob(ctx, 'numberOfSteps', 'STEPS', 300, controlsY, 1, 16, this.params.numberOfSteps);
 
         this.drawConnectors(ctx, hoveredConnectorInfo);
         ctx.restore();
@@ -210,7 +221,7 @@ export class Sequencer {
         ctx.fillStyle = '#E0E0E0';
         ctx.textAlign = 'center';
         ctx.fillText(label, x, y - knobRadius - 5);
-        ctx.fillText(paramName === 'steps' ? Math.round(value) : value.toFixed(0), x, y + knobRadius + 12);
+        ctx.fillText(paramName === 'numberOfSteps' ? Math.round(value) : value.toFixed(0), x, y + knobRadius + 12);
 
         ctx.strokeStyle = '#555';
         ctx.lineWidth = 3;
@@ -330,8 +341,8 @@ export class Sequencer {
             let newValue = this.dragStart.value + dy * sensitivity;
             newValue = Math.max(hotspot.min, Math.min(hotspot.max, newValue));
             
-            if (this.activeControl === 'steps') {
-                this.params.steps = Math.round(newValue);
+            if (this.activeControl === 'numberOfSteps') {
+                this.params.numberOfSteps = Math.round(newValue);
             } else {
                 this.params[this.activeControl] = newValue;
             }

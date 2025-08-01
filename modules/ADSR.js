@@ -184,19 +184,18 @@ export class ADSR {
     }
 
     getConnectorAt(x, y) {
+        const localX = x - this.x;
+        const localY = y - this.y;
         for (const [name, props] of Object.entries(this.inputs)) {
-            if (Math.sqrt(Math.pow(x - (this.x + props.x), 2) + Math.pow(y - (this.y + props.y), 2)) < 9)
+            if (Math.sqrt(Math.pow(localX - props.x, 2) + Math.pow(localY - props.y, 2)) < 9)
                 return { name, type: 'input', props, module: this };
         }
         for (const [name, props] of Object.entries(this.outputs)) {
-            if (Math.sqrt(Math.pow(x - (this.x + props.x), 2) + Math.pow(y - (this.y + props.y), 2)) < 9)
+            if (Math.sqrt(Math.pow(localX - props.x, 2) + Math.pow(localY - props.y, 2)) < 9)
                 return { name, type: 'output', props, module: this };
         }
         return null;
     }
-
-    // Los métodos triggerOn y triggerOff ya no son necesarios aquí
-    // porque la lógica está en el worklet.
 
     disconnect() {
         if (this.workletNode) {
