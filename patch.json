@@ -3,22 +3,22 @@
     {
       "id": "keyboard-main",
       "type": "Keyboard",
-      "x": 490,
+      "x": 675,
       "y": 725,
       "isPermanent": true
     },
     {
       "id": "output-main",
       "type": "Output",
-      "x": 565,
+      "x": 750,
       "y": 50,
       "isPermanent": true
     },
     {
       "id": "vco-1753909969657",
       "type": "VCO",
-      "x": 403.9999999999999,
-      "y": 164.00000000000003,
+      "x": 428.9999999999999,
+      "y": 78.00000000000003,
       "waveform": "sawtooth",
       "detuneValue": 0
     },
@@ -52,31 +52,31 @@
         0.6580014250144373,
         0.5,
         0.5,
-        0.5,
+        0.914623318079365,
         0.5,
         0.7364105159235272,
         0.5,
         0.5,
         0.5,
+        0.914623318079365,
+        0.8646233180793651,
         0.5,
         0.5,
-        0.5,
-        0.5,
-        0.5,
+        0.8271233180793651,
         0.5
       ],
       "gateLengths": [
+        0.8406055597295239,
+        0.5,
+        0.7746055597295237,
+        0.44460555972952376,
+        0.5,
+        0.9066055597295238,
+        1,
         0.5,
         0.5,
         0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.574123762038114,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
+        1,
         0.5,
         0.5,
         0.5,
@@ -113,6 +113,12 @@
       "type": "Osciloscopio",
       "x": 89,
       "y": 705
+    },
+    {
+      "id": "osc-1754073393682",
+      "type": "Osciloscopio",
+      "x": 1181,
+      "y": 276
     }
   ],
   "connections": [
@@ -147,15 +153,21 @@
       "toConnector": "Gate"
     },
     {
+      "fromId": "sequencer-1753980160303",
+      "fromConnector": "DISPARO",
+      "toId": "osc-1754072618655",
+      "toConnector": "input"
+    },
+    {
       "fromId": "adsr-1753909971685",
       "fromConnector": "CV",
-      "toId": "osc-1754072523958",
+      "toId": "osc-1754073393682",
       "toConnector": "input"
     },
     {
       "fromId": "sequencer-1753980160303",
-      "fromConnector": "DISPARO",
-      "toId": "osc-1754072618655",
+      "fromConnector": "TENSION",
+      "toId": "osc-1754072523958",
       "toConnector": "input"
     }
   ]

@@ -62,6 +62,7 @@ async function initAudioContext() {
     // Load AudioWorklets
     await audioContext.audioWorklet.addModule('./worklets/ring-mod-processor.js');
     await audioContext.audioWorklet.addModule('./worklets/sequencer-processor.js');
+    await audioContext.audioWorklet.addModule('./worklets/adsr-processor.js');
     
     audioContextReady = true;
     console.log('AudioContext initialized successfully');
@@ -260,9 +261,7 @@ async function reconstructPatch(patchData) {
       await newModule.readyPromise;
     }
 
-    if (newModule.type === 'Sequencer') {
-      setupSequencerCallbacks(newModule);
-    }
+    
 
     return newModule;
   });
@@ -304,29 +303,7 @@ async function reconstructPatch(patchData) {
   });
 }
 
-function setupSequencerCallbacks(sequencerModule) {
-  sequencerModule.onGateOn = () => {
-    const now = audioContext.currentTime;
-    connections.forEach(conn => {
-      if (conn.fromModule === sequencerModule && conn.fromConnector.name === 'DISPARO') {
-        if (conn.toModule.triggerOn) {
-          conn.toModule.triggerOn(now);
-        }
-      }
-    });
-  };
-  
-  sequencerModule.onGateOff = () => {
-    const now = audioContext.currentTime;
-    connections.forEach(conn => {
-      if (conn.fromModule === sequencerModule && conn.fromConnector.name === 'DISPARO') {
-        if (conn.toModule.triggerOff) {
-          conn.toModule.triggerOff(now);
-        }
-      }
-    });
-  };
-}
+
 
 // Interaction functions
 function getModuleAt(x, y) {
@@ -395,9 +372,7 @@ async function addModule(type, x, y) {
     await newModule.readyPromise;
   }
 
-  if (newModule.type === 'Sequencer') {
-    setupSequencerCallbacks(newModule);
-  }
+  
 
   modules.push(newModule);
   selectedModule = newModule;
@@ -566,19 +541,7 @@ function onKeyDown(e) {
   
   const keyboardModule = modules.find(m => m instanceof Keyboard);
   if (keyboardModule) {
-    const isNewPress = keyboardModule.activeKeys.size === 0;
     keyboardModule.handleKeyDown(e.key.toLowerCase());
-    
-    if (isNewPress) {
-      const now = audioContext.currentTime;
-      connections.forEach(conn => {
-        if (conn.fromModule === keyboardModule && conn.fromConnector.name === 'DISPARO') {
-          if (conn.toModule.triggerOn) {
-            conn.toModule.triggerOn(now);
-          }
-        }
-      });
-    }
   }
 }
 
@@ -588,17 +551,6 @@ function onKeyUp(e) {
   const keyboardModule = modules.find(m => m instanceof Keyboard);
   if (keyboardModule) {
     keyboardModule.handleKeyUp(e.key.toLowerCase());
-    
-    if (keyboardModule.activeKeys.size === 0) {
-      const now = audioContext.currentTime;
-      connections.forEach(conn => {
-        if (conn.fromModule === keyboardModule && conn.fromConnector.name === 'DISPARO') {
-          if (conn.toModule.triggerOff) {
-            conn.toModule.triggerOff(now);
-          }
-        }
-      });
-    }
   }
 }
 

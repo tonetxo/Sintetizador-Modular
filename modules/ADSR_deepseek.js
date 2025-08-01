@@ -10,6 +10,7 @@ export class ADSR {
         this.height = 300;
         this.type = 'ADSR';
 
+        // Parámetros con valores mínimos razonables
         this.params = {
             attack: initialState.attack || 0.01,
             decay: initialState.decay || 0.1,
@@ -19,43 +20,37 @@ export class ADSR {
 
         this.activeControl = null;
         this.paramHotspots = {};
+        
+        // Crear el output del envelope
+        this.envelopeOutput = audioContext.createGain();
+        this.envelopeOutput.gain.value = 0;
+        this.envelopeOutput.gain.setValueAtTime(0, audioContext.currentTime);
 
-        this.readyPromise = this.initWorklet(initialState);
-    }
-
-    async initWorklet(initialState) {
-        try {
-            this.workletNode = new AudioWorkletNode(audioContext, 'adsr-processor', {
-                numberOfInputs: 1,
-                numberOfOutputs: 1,
-                outputChannelCount: [1],
-                parameterData: {
-                    attack: this.params.attack,
-                    decay: this.params.decay,
-                    sustain: this.params.sustain,
-                    release: this.params.release,
-                }
-            });
-
-            this.inputs = {
-                'Gate': { x: 0, y: this.height / 2, type: 'gate', target: this.workletNode, orientation: 'horizontal' }
-            };
-            this.outputs = {
-                'CV': { x: this.width, y: this.height / 2, type: 'cv', source: this.workletNode, orientation: 'horizontal' }
-            };
-
-            // Conectar los parámetros para control en tiempo real
-            this.attackParam = this.workletNode.parameters.get('attack');
-            this.decayParam = this.workletNode.parameters.get('decay');
-            this.sustainParam = this.workletNode.parameters.get('sustain');
-            this.releaseParam = this.workletNode.parameters.get('release');
-
-            if (initialState && Object.keys(initialState).length > 0) {
-                this.setState(initialState);
+        this.inputs = {
+            'Gate': { 
+                x: 0, 
+                y: this.height / 2, 
+                type: 'gate', 
+                orientation: 'horizontal',
+                target: this,
+                onGateOn: (time) => this.triggerOn(time),
+                onGateOff: (time) => this.triggerOff(time)
             }
+        };
+        
+        this.outputs = {
+            'CV': { 
+                x: this.width, 
+                y: this.height / 2, 
+                type: 'cv', 
+                source: this.envelopeOutput, 
+                orientation: 'horizontal',
+                outputIndex: 0
+            }
+        };
 
-        } catch (error) {
-            console.error(`[ADSR-${this.id}] Error initializing worklet:`, error);
+        if (Object.keys(initialState).length > 0) {
+            this.setState(initialState);
         }
     }
 
@@ -63,23 +58,29 @@ export class ADSR {
         ctx.save();
         ctx.translate(this.x, this.y);
 
+        // Caja principal
         ctx.fillStyle = '#222';
         ctx.strokeStyle = isSelected ? '#aaffff' : '#E0E0E0';
         ctx.lineWidth = 2;
         ctx.fillRect(0, 0, this.width, this.height);
         ctx.strokeRect(0, 0, this.width, this.height);
 
+        // Título
         ctx.fillStyle = '#E0E0E0';
         ctx.font = '14px Arial';
         ctx.textAlign = 'center';
         ctx.fillText('ADSR', this.width / 2, 22);
 
-        const sliderHeight = 240;
-        const sliderY = 40;
-        this.drawVerticalSlider(ctx, 'attack', 60, sliderY, sliderHeight, 0.01, 2, this.params.attack);
-        this.drawVerticalSlider(ctx, 'decay', 140, sliderY, sliderHeight, 0.01, 2, this.params.decay);
+        // Sliders para los parámetros
+        const sliderHeight = 200;
+        const sliderY = 50;
+        this.drawVerticalSlider(ctx, 'attack', 60, sliderY, sliderHeight, 0.001, 2, this.params.attack);
+        this.drawVerticalSlider(ctx, 'decay', 140, sliderY, sliderHeight, 0.001, 2, this.params.decay);
         this.drawVerticalSlider(ctx, 'sustain', 220, sliderY, sliderHeight, 0, 1, this.params.sustain);
-        this.drawVerticalSlider(ctx, 'release', 300, sliderY, sliderHeight, 0.01, 5, this.params.release);
+        this.drawVerticalSlider(ctx, 'release', 300, sliderY, sliderHeight, 0.001, 5, this.params.release);
+
+        // Visualización del envelope
+        this.drawEnvelopePreview(ctx, 30, sliderY, 20, sliderHeight);
 
         ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
@@ -88,11 +89,13 @@ export class ADSR {
     drawVerticalSlider(ctx, paramName, x, y, height, minVal, maxVal, currentValue) {
         const knobRadius = 8;
         
+        // Etiqueta
         ctx.fillStyle = '#E0E0E0';
         ctx.font = '10px Arial';
         ctx.textAlign = 'center';
         ctx.fillText(paramName.toUpperCase(), x, y - 5);
 
+        // Barra
         ctx.strokeStyle = '#555';
         ctx.lineWidth = 4;
         ctx.beginPath();
@@ -100,6 +103,7 @@ export class ADSR {
         ctx.lineTo(x, y + height);
         ctx.stroke();
 
+        // Pomo
         const normalizedValue = Math.max(0, Math.min(1, (currentValue - minVal) / (maxVal - minVal)));
         const knobY = y + height - (normalizedValue * height);
 
@@ -111,15 +115,51 @@ export class ADSR {
         ctx.lineWidth = 1.5;
         ctx.stroke();
         
+        // Valor
+        ctx.fillStyle = '#E0E0E0';
         ctx.fillText(currentValue.toFixed(2), x, y + height + 15);
 
-        this.paramHotspots[paramName] = { x: x - knobRadius, y: y, width: knobRadius * 2, height: height, min: minVal, max: maxVal };
+        // Guardar área interactiva
+        this.paramHotspots[paramName] = { 
+            x: x - knobRadius, 
+            y: y, 
+            width: knobRadius * 2, 
+            height: height, 
+            min: minVal, 
+            max: maxVal 
+        };
+    }
+
+    drawEnvelopePreview(ctx, x, y, width, height) {
+        const attackX = x + width * (this.params.attack / 2);
+        const decayX = attackX + width * (this.params.decay / 2);
+        const releaseX = decayX + width * 0.5;
+        const sustainY = y + height * (1 - this.params.sustain);
+        const endX = releaseX + width * (this.params.release / 2);
+
+        ctx.strokeStyle = '#4a90e2';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y + height);
+        
+        // Attack
+        ctx.lineTo(attackX, y);
+        
+        // Decay
+        ctx.lineTo(decayX, sustainY);
+        
+        // Release (solo como preview)
+        ctx.lineTo(endX, sustainY);
+        ctx.lineTo(endX, y + height);
+        
+        ctx.stroke();
     }
     
     drawConnectors(ctx, hovered) {
         const connectorRadius = 8;
         ctx.font = '10px Arial';
 
+        // Input
         const inputName = 'Gate';
         const inputProps = this.inputs[inputName];
         const ix = this.x + inputProps.x;
@@ -130,8 +170,9 @@ export class ADSR {
         ctx.fill();
         ctx.fillStyle = '#E0E0E0';
         ctx.textAlign = 'left';
-        ctx.fillText('DISPARO', ix + connectorRadius + 4, iy + 4);
+        ctx.fillText('GATE', ix + connectorRadius + 4, iy + 4);
 
+        // Output
         const outputName = 'CV';
         const outputProps = this.outputs[outputName];
         const ox = this.x + outputProps.x;
@@ -169,14 +210,12 @@ export class ADSR {
         let normalizedValue = (sliderRect.y + sliderRect.height - localY) / sliderRect.height;
         normalizedValue = Math.max(0, Math.min(1, normalizedValue));
 
-        const newValue = sliderRect.min + normalizedValue * (sliderRect.max - sliderRect.min);
-        this.params[this.activeControl] = newValue;
-
-        // Actualizar el AudioParam correspondiente
-        const param = this[`${this.activeControl}Param`];
-        if (param) {
-            param.setValueAtTime(newValue, audioContext.currentTime);
+        // Aplicar curva no lineal para mejor control en valores bajos
+        if (this.activeControl !== 'sustain') {
+            normalizedValue = Math.pow(normalizedValue, 0.5);
         }
+
+        this.params[this.activeControl] = sliderRect.min + normalizedValue * (sliderRect.max - sliderRect.min);
     }
 
     endInteraction() {
@@ -195,32 +234,65 @@ export class ADSR {
         return null;
     }
 
-    // Los métodos triggerOn y triggerOff ya no son necesarios aquí
-    // porque la lógica está en el worklet.
+    triggerOn(now = audioContext.currentTime) {
+        const gain = this.envelopeOutput.gain;
+        const currentValue = gain.value;
+        
+        // Cancelar cualquier envelope programado
+        gain.cancelScheduledValues(now);
+        
+        // Si el valor actual es muy bajo, comenzar desde 0
+        const startValue = currentValue < 0.001 ? 0 : currentValue;
+        gain.setValueAtTime(startValue, now);
+        
+        // Attack phase
+        const attackEnd = now + this.params.attack;
+        gain.exponentialRampToValueAtTime(1.0, attackEnd);
+        
+        // Decay phase
+        const decayEnd = attackEnd + this.params.decay;
+        gain.exponentialRampToValueAtTime(this.params.sustain, decayEnd);
+    }
+
+    triggerOff(now = audioContext.currentTime) {
+        const gain = this.envelopeOutput.gain;
+        const currentValue = gain.value;
+        
+        // Cancelar cualquier envelope programado
+        gain.cancelScheduledValues(now);
+        
+        // Comenzar desde el valor actual
+        gain.setValueAtTime(currentValue, now);
+        
+        // Release phase
+        gain.exponentialRampToValueAtTime(0, now + this.params.release);
+    }
 
     disconnect() {
-        if (this.workletNode) {
-            this.workletNode.disconnect();
-        }
+        this.envelopeOutput.disconnect();
     }
 
     getState() {
         return {
-            id: this.id, type: 'ADSR', x: this.x, y: this.y,
-            ...this.params
+            id: this.id, 
+            type: 'ADSR', 
+            x: this.x, 
+            y: this.y,
+            attack: this.params.attack, 
+            decay: this.params.decay,
+            sustain: this.params.sustain, 
+            release: this.params.release
         };
     }
 
     setState(state) {
         this.id = state.id || this.id;
-        this.x = state.x; this.y = state.y;
-        Object.assign(this.params, state);
-
-        if (this.workletNode) {
-            this.attackParam.setValueAtTime(this.params.attack, audioContext.currentTime);
-            this.decayParam.setValueAtTime(this.params.decay, audioContext.currentTime);
-            this.sustainParam.setValueAtTime(this.params.sustain, audioContext.currentTime);
-            this.releaseParam.setValueAtTime(this.params.release, audioContext.currentTime);
-        }
+        this.x = state.x; 
+        this.y = state.y;
+        
+        if (state.attack !== undefined) this.params.attack = Math.max(0.001, state.attack);
+        if (state.decay !== undefined) this.params.decay = Math.max(0.001, state.decay);
+        if (state.sustain !== undefined) this.params.sustain = Math.max(0, Math.min(1, state.sustain));
+        if (state.release !== undefined) this.params.release = Math.max(0.001, state.release);
     }
 }
