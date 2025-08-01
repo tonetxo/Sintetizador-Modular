@@ -188,10 +188,6 @@ function deleteSelection() {
     connections = connections.filter(c => c !== conn);
     selectedConnection = null;
   } else if (selectedModule && !selectedModule.isPermanent) {
-    if (selectedModule.disconnect) { 
-      selectedModule.disconnect(); 
-    }
-    
     connections = connections.filter(conn => {
       const shouldRemove = conn.fromModule === selectedModule || conn.toModule === selectedModule;
       if (shouldRemove && conn.fromConnector.props.source && conn.toConnector.props.target) {
@@ -312,7 +308,7 @@ function setupSequencerCallbacks(sequencerModule) {
   sequencerModule.onGateOn = () => {
     const now = audioContext.currentTime;
     connections.forEach(conn => {
-      if (conn.fromModule === sequencerModule && conn.fromConnector.name === 'Gate Out') {
+      if (conn.fromModule === sequencerModule && conn.fromConnector.name === 'DISPARO') {
         if (conn.toModule.triggerOn) {
           conn.toModule.triggerOn(now);
         }
@@ -323,7 +319,7 @@ function setupSequencerCallbacks(sequencerModule) {
   sequencerModule.onGateOff = () => {
     const now = audioContext.currentTime;
     connections.forEach(conn => {
-      if (conn.fromModule === sequencerModule && conn.fromConnector.name === 'Gate Out') {
+      if (conn.fromModule === sequencerModule && conn.fromConnector.name === 'DISPARO') {
         if (conn.toModule.triggerOff) {
           conn.toModule.triggerOff(now);
         }
@@ -410,6 +406,8 @@ async function addModule(type, x, y) {
 // Event handlers
 function onMouseDown(e) {
   e.preventDefault();
+  if (interactingModule) return; // Prevent new interactions while one is active
+
   mousePos = { x: e.clientX, y: e.clientY };
   const worldPos = screenToWorld(mousePos.x, mousePos.y);
 
@@ -446,6 +444,7 @@ function onMouseDown(e) {
       }
       
       if (moduleHit.handleClick?.(worldPos.x, worldPos.y)) {
+        interactingModule = moduleHit; // Set interactingModule to prevent re-triggering
         return;
       }
       
@@ -519,7 +518,7 @@ function onMouseUp(e) {
       );
       
       const isOscilloscopeInput = hit.module.type === 'Osciloscopio' && 
-                                 (outputType === 'audio' || outputType === 'cv');
+                                 (outputType === 'audio' || outputType === 'cv' || outputType === 'gate');
 
       if (isCompatible || isOscilloscopeInput) {
         if (patchStart.connector.props.source && hit.connector.props.target) {

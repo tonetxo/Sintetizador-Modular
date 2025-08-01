@@ -6,180 +6,103 @@ class SequencerProcessor extends AudioWorkletProcessor {
             { name: 'tempo', defaultValue: 120, minValue: 20, maxValue: 300 },
             { name: 'direction', defaultValue: 0, minValue: 0, maxValue: 3 },
             { name: 'steps', defaultValue: 16, minValue: 1, maxValue: 16 },
-            { name: 'gateLevel', defaultValue: 1.0, minValue: 0.0, maxValue: 1.0 } // Nuevo AudioParam para gateLevel
         ];
     }
 
     constructor() {
         super();
-        console.log('[SequencerProcessor] Constructor: Initializing.');
-        this.phase = 0;
-        this.currentStep = 0;
-        this.pingPongDirection = 1;
-        this.lastStepTime = -1;
-        this.lastGateState = false;
         this._isRunning = false;
-        this._initialized = false;
-        this._debug = false; // Control debug logging
+        this._currentStep = 0;
+        this._sequence = Array(16).fill(0.5);
+        this._gateLengths = Array(16).fill(0.5);
+        this._stepStates = Array(16).fill(0); // 0: ON, 1: OFF, 2: SKIP
+        this._nextStepTime = 0;
+        this._gateEndTime = -1;
+        this._lastCv = 0;
+        this._justStarted = false; // Flag to handle first run
+        this._lastGateState = 0; // Track gate state for messages
 
-        this.sequence = Array(16).fill(0.5);
-        this.gateLengths = Array(16).fill(0.5);
-        this.stepStates = Array(16).fill(0);
+        console.log(`[SequencerProcessor] Constructor: Initializing.`);
 
-        this.port.onmessage = (event) => {
-            if (this._debug) console.log(`[SequencerProcessor] Message received: ${event.data.type}`);
-            if (event.data.type === 'updateSequence') this.sequence = event.data.sequence;
-            if (event.data.type === 'updateGateLengths') this.gateLengths = event.data.gateLengths;
-            if (event.data.type === 'updateStepStates') this.stepData = event.data.stepStates;
-            
-            if (event.data.type === 'reset') {
-                if (this._debug) console.log('[SequencerProcessor] Resetting state.');
-                this.currentStep = 0;
-                this.phase = 0;
-                this.lastStepTime = -1;
-            }
-            
-            if (event.data.type === 'start') {
+        this.port.onmessage = (e) => {
+            if (e.data.type === 'start') {
                 if (!this._isRunning) {
-                    if (this._debug) console.log('[SequencerProcessor] Starting sequencer.');
+                    console.log(`[SequencerProcessor] Received start message.`);
                     this._isRunning = true;
-                    // Initialize lastStepTime to current time for accurate first step timing
-                    this.lastStepTime = currentTime; 
-                    if (!this._initialized) {
-                        this._initialized = true;
-                    }
+                    this._justStarted = true; // Signal to the process loop to set the start time
                 }
-            }
-            
-            if (event.data.type === 'stop') {
-                console.log('[SequencerProcessor] Stopping sequencer.');
-                this._isRunning = false;
-                // Enviar mensaje de gateOff si estaba activo
-                if (this.lastGateState) {
-                    this.port.postMessage({ type: 'gateOff' });
-                    this.lastGateState = false;
+            } else if (e.data.type === 'stop') {
+                if (this._isRunning) {
+                    console.log(`[SequencerProcessor] Received stop message.`);
+                    this._isRunning = false;
+                    this._justStarted = false;
+                    this._currentStep = 0;
+                    this._gateEndTime = -1;
+                    this.port.postMessage({ currentStep: this._currentStep });
                 }
+            } else if (e.data.type === 'updateSequence') {
+                this._sequence = e.data.sequence;
+            } else if (e.data.type === 'updateGateLengths') {
+                this._gateLengths = e.data.gateLengths;
+            } else if (e.data.type === 'updateStepStates') {
+                this._stepStates = e.data.stepStates;
             }
         };
     }
 
     process(inputs, outputs, parameters) {
-        if (this._debug) console.log(`[SequencerProcessor] Process cycle. isRunning: ${this._isRunning}, currentTime: ${currentTime.toFixed(4)}`);
-        if (!outputs[0]?.[0] || !outputs[1]?.[0]) return true;
+        const cvOutput = outputs[0];
+        const gateOutput = outputs[1];
+        const bufferSize = cvOutput?.[0]?.length;
 
-        const cvOutput = outputs[0][0];
-        const gateOutput = outputs[1][0];
-        
-        const tempo = parameters.tempo[0];
-        const direction = parameters.direction[0];
-        const numSteps = Math.round(parameters.steps[0]);
-        const gateLevel = parameters.gateLevel[0]; // Obtener el valor de gateLevel
-
-        const clockInput = inputs[0];
-        const resetInput = inputs[1];
-
-        const beatDuration = 60 / tempo;
-        const stepDuration = beatDuration / 4;
-
-        // Si no está corriendo, mantener el último valor CV y gate apagado
-        if (!this._isRunning) {
-            const lastCvValue = this.sequence[this.currentStep];
-            for (let i = 0; i < cvOutput.length; i++) {
-                cvOutput[i] = lastCvValue;
-                gateOutput[i] = 0.0;
-            }
-            return true;
+        if (!bufferSize) {
+            return true; // Not ready yet
         }
 
-        for (let i = 0; i < cvOutput.length; i++) {
+        // On the first run after starting, set the time reference from the audio thread.
+        if (this._justStarted) {
+            this._nextStepTime = currentTime;
+            this._justStarted = false;
+            console.log(`[SequencerProcessor] First run detected. Initializing nextStepTime to ${this._nextStepTime.toFixed(4)}`);
+        }
+
+        const tempo = parameters.tempo[0];
+        const steps = Math.round(parameters.steps[0]);
+        const stepDuration = (60 / tempo) / 4; // Dividido por 4 para semicorcheas (16th notes)
+
+        for (let i = 0; i < bufferSize; i++) {
             const time = currentTime + i / sampleRate;
 
-            // Manejar reset
-            if (resetInput?.[0]?.[i] > 0.5) {
-                this.currentStep = 0;
-                this.phase = 0;
-                this.lastStepTime = time;
-            }
+            while (this._isRunning && time >= this._nextStepTime) {
+                const stepState = this._stepStates[this._currentStep];
 
-            const isClockConnected = clockInput?.[0]?.[i] !== undefined;
-            let shouldAdvance = false;
-
-            if (isClockConnected) {
-                if (clockInput[0][i] > 0.5 && (!this.lastClock || this.lastClock <= 0.5)) {
-                    shouldAdvance = true;
+                if (stepState === 0) { // Step is ON
+                    const cv = this._sequence[this._currentStep];
+                    const gateLength = this._gateLengths[this._currentStep];
+                    this._lastCv = cv;
+                    this._gateEndTime = this._nextStepTime + stepDuration * gateLength;
                 }
-                this.lastClock = clockInput[0][i];
-            } else { // No clock connected, use internal timing
-                // Advance if current time has passed the expected time for the next step
-                if (time >= this.lastStepTime + stepDuration) {
-                    shouldAdvance = true;
-                }
+
+                this.port.postMessage({ currentStep: this._currentStep });
+                this._currentStep = (this._currentStep + 1) % steps;
+                this._nextStepTime += stepDuration;
             }
 
-            if (shouldAdvance) {
-                this.advanceStep(direction, numSteps);
-                this.lastStepTime = time;
-                this.port.postMessage({ currentStep: this.currentStep });
-                if (this._debug) console.log(`[SequencerProcessor] Advanced to step: ${this.currentStep}, lastStepTime: ${this.lastStepTime.toFixed(4)}`);
-            }
+            if (gateOutput && gateOutput[0]) {
+                const currentGate = time < this._gateEndTime ? 1 : 0;
+                gateOutput[0][i] = currentGate;
 
-            // Manejar gate
-            let gateOn = false;
-            const stepState = this.stepStates[this.currentStep];
-            if (stepState === 0) {
-                const gateDuration = stepDuration * this.gateLengths[this.currentStep];
-                if (time - this.lastStepTime < gateDuration) {
-                    gateOn = true;
+                if (currentGate !== this._lastGateState) {
+                    this.port.postMessage({ type: currentGate === 1 ? 'gateOn' : 'gateOff' });
+                    this._lastGateState = currentGate;
                 }
             }
-
-            // Detección de cambios en el gate
-            if (gateOn && !this.lastGateState) {
-                this.port.postMessage({ type: 'gateOn' });
-                if (this._debug) console.log(`[SequencerProcessor] Gate ON for step ${this.currentStep}. Time: ${time.toFixed(4)}`);
-            } else if (!gateOn && this.lastGateState) {
-                this.port.postMessage({ type: 'gateOff' });
-                if (this._debug) console.log(`[SequencerProcessor] Gate OFF for step ${this.currentStep}. Time: ${time.toFixed(4)}`);
+            if (cvOutput && cvOutput[0]) {
+                cvOutput[0][i] = this._lastCv;
             }
-            this.lastGateState = gateOn;
-
-            // Escribir salidas
-            cvOutput[i] = this.sequence[this.currentStep];
-            gateOutput[i] = gateOn ? gateLevel : 0.0; // Usar gateLevel aquí
         }
-        
+
         return true;
-    }
-
-    advanceStep(direction, numSteps) {
-        let activeSteps = [];
-        for(let i = 0; i < numSteps; i++) {
-            if(this.stepStates[i] !== 2) {
-                activeSteps.push(i);
-            }
-        }
-        if(activeSteps.length === 0) return;
-
-        let currentActiveIndex = activeSteps.indexOf(this.currentStep);
-        if(currentActiveIndex === -1) currentActiveIndex = 0;
-
-        switch (direction) {
-            case 0: // Forward
-                currentActiveIndex = (currentActiveIndex + 1) % activeSteps.length;
-                break;
-            case 1: // Backward
-                currentActiveIndex = (currentActiveIndex - 1 + activeSteps.length) % activeSteps.length;
-                break;
-            case 2: // Ping-Pong
-                if (currentActiveIndex >= activeSteps.length - 1) this.pingPongDirection = -1;
-                if (currentActiveIndex <= 0) this.pingPongDirection = 1;
-                currentActiveIndex += this.pingPongDirection;
-                break;
-            case 3: // Random
-                currentActiveIndex = Math.floor(Math.random() * activeSteps.length);
-                break;
-        }
-        this.currentStep = activeSteps[currentActiveIndex];
     }
 }
 

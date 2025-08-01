@@ -17,8 +17,8 @@
     {
       "id": "vco-1753909969657",
       "type": "VCO",
-      "x": 337.9999999999999,
-      "y": 160.00000000000003,
+      "x": 403.9999999999999,
+      "y": 164.00000000000003,
       "waveform": "sawtooth",
       "detuneValue": 0
     },
@@ -41,9 +41,9 @@
     {
       "id": "sequencer-1753980160303",
       "type": "Sequencer",
-      "x": -140.22264996802187,
-      "y": 413.1698654463492,
-      "tempo": 139.8863636363637,
+      "x": -133.22264996802187,
+      "y": 320.1698654463492,
+      "tempo": 100.51136363636371,
       "direction": 1,
       "steps": 16,
       "running": false,
@@ -101,6 +101,18 @@
         0,
         0
       ]
+    },
+    {
+      "id": "osc-1754072523958",
+      "type": "Osciloscopio",
+      "x": 76,
+      "y": 80
+    },
+    {
+      "id": "osc-1754072618655",
+      "type": "Osciloscopio",
+      "x": 89,
+      "y": 705
     }
   ],
   "connections": [
@@ -124,15 +136,27 @@
     },
     {
       "fromId": "sequencer-1753980160303",
-      "fromConnector": "CV Out",
+      "fromConnector": "TENSION",
       "toId": "vco-1753909969657",
       "toConnector": "1V/Oct"
     },
     {
       "fromId": "sequencer-1753980160303",
-      "fromConnector": "Gate Out",
+      "fromConnector": "DISPARO",
       "toId": "adsr-1753909971685",
       "toConnector": "Gate"
+    },
+    {
+      "fromId": "adsr-1753909971685",
+      "fromConnector": "CV",
+      "toId": "osc-1754072523958",
+      "toConnector": "input"
+    },
+    {
+      "fromId": "sequencer-1753980160303",
+      "fromConnector": "DISPARO",
+      "toId": "osc-1754072618655",
+      "toConnector": "input"
     }
   ]
 }

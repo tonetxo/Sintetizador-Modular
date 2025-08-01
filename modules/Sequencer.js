@@ -17,7 +17,7 @@ export class Sequencer {
             steps: initialState.steps || 16,
             running: initialState.running !== undefined ? initialState.running : false,
             sequence: initialState.sequence || Array(16).fill(0.5),
-            gateLengths: initialState.gateLengths || Array(16).fill(0.5),
+            gateLengths: initialState.gateLengths || Array(16).fill(0.8),
             stepStates: initialState.stepStates || Array(16).fill(0),
         };
         
@@ -40,14 +40,15 @@ export class Sequencer {
 
     async initWorklet() {
         console.log(`[Sequencer-${this.id}] Initializing worklet...`);
+
         this.inputs = {
             'Clock In': { x: 20, y: this.height, type: 'gate', orientation: 'vertical' },
             'Reset In': { x: 60, y: this.height, type: 'gate', orientation: 'vertical' },
             'Direction In': { x: 100, y: this.height, type: 'cv', orientation: 'vertical' },
         };
         this.outputs = {
-            'CV Out': { x: this.width, y: this.height - 80, type: 'cv', orientation: 'horizontal' },
-            'Gate Out': { x: this.width, y: this.height - 40, type: 'gate', orientation: 'horizontal' },
+            'TENSION': { x: this.width, y: this.height - 80, type: 'cv', orientation: 'horizontal' },
+            'DISPARO': { x: this.width, y: this.height - 40, type: 'gate', orientation: 'horizontal' },
         };
 
         try {
@@ -58,32 +59,36 @@ export class Sequencer {
             });
             console.log(`[Sequencer-${this.id}] Worklet node created.`);
 
+            // Keep-alive connection to ensure the process() method is always called
+            this.keepAliveNode = audioContext.createGain();
+            this.keepAliveNode.gain.value = 0;
+            this.workletNode.connect(this.keepAliveNode);
+            this.keepAliveNode.connect(audioContext.destination);
+
+            // Connect inputs to the worklet
             this.inputs['Clock In'].target = this.workletNode;
             this.inputs['Clock In'].inputIndex = 0;
             this.inputs['Reset In'].target = this.workletNode;
             this.inputs['Reset In'].inputIndex = 1;
             this.inputs['Direction In'].target = this.workletNode.parameters.get('direction');
 
-            this.cvOutput = this.workletNode;
-            this.outputs['CV Out'].source = this.cvOutput;
+            // Assign outputs from the worklet
+            this.outputs['TENSION'].source = this.workletNode;
+            this.outputs['DISPARO'].source = this.workletNode;
+            this.outputs['DISPARO'].port = 1; // Second output
 
-            this.outputs['Gate Out'].source = this.workletNode.parameters.get('gateLevel');
-            
             this.workletNode.port.onmessage = (e) => {
                 if (e.data.currentStep !== undefined) {
                     this.currentStep = e.data.currentStep;
-                    // console.log(`[Sequencer-${this.id}] Current step: ${this.currentStep}`);
                 }
                 if (e.data.type === 'gateOn') {
-                    console.log(`[Sequencer-${this.id}] Received gateOn from worklet.`);
                     if (this.onGateOn) this.onGateOn();
                 }
                 if (e.data.type === 'gateOff') {
-                    console.log(`[Sequencer-${this.id}] Received gateOff from worklet.`);
                     if (this.onGateOff) this.onGateOff();
                 }
             };
-            
+
             await this.updateWorkletState();
             console.log(`[Sequencer-${this.id}] Worklet initialized and state updated.`);
             return true;
@@ -353,7 +358,7 @@ export class Sequencer {
         }
     }
     
-    async handleClick(x, y) {
+    handleClick(x, y) {
         const localPos = { x: x - this.x, y: y - this.y };
 
         for (const [name, spot] of Object.entries(this.hotspots)) {
@@ -361,17 +366,17 @@ export class Sequencer {
                 if (spot.type === 'button' && name === 'run/stop') {
                     console.log(`[Sequencer-${this.id}] Run/Stop button clicked. Current running state: ${this.params.running}`);
                     if (audioContext.state === 'suspended') {
-                        await audioContext.resume();
+                        audioContext.resume();
                         console.log(`[Sequencer-${this.id}] AudioContext resumed.`);
                     }
                     this.params.running = !this.params.running;
                     console.log(`[Sequencer-${this.id}] New running state: ${this.params.running}. Updating worklet state...`);
-                    await this.updateWorkletState();
+                    this.updateWorkletState();
                     return true;
                 }
                 if (spot.type === 'selector' && name === 'direction') {
                     this.params.direction = (this.params.direction + 1) % this.directionModes.length;
-                    await this.updateWorkletState();
+                    this.updateWorkletState();
                     return true;
                 }
             }
@@ -385,7 +390,7 @@ export class Sequencer {
             const switchRect = { x: stepX, y: switchY, width: stepWidth, height: 15 };
             if (this.isInside(localPos, switchRect)) {
                 this.params.stepStates[i] = (this.params.stepStates[i] + 1) % 3;
-                await this.updateWorkletState();
+                this.updateWorkletState();
                 return true;
             }
         }
@@ -411,11 +416,7 @@ export class Sequencer {
         return null;
     }
 
-    disconnect() {
-        if (this.workletNode) {
-            this.workletNode.disconnect();
-        }
-    }
+    
 
     getState() {
         return {
