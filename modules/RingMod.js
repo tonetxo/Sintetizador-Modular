@@ -8,7 +8,7 @@ export class RingMod {
         this.x = x;
         this.y = y;
         this.width = 150;
-        this.height = 250;
+        this.height = 150; // Cuadrado
         
         this.inputs = {};
         this.outputs = {};
@@ -17,36 +17,29 @@ export class RingMod {
 
     async initWorklet() {
         try {
-            // El worklet necesita 2 entradas (señal y modulador) y 1 salida.
             this.workletNode = new AudioWorkletNode(audioContext, 'ring-mod-processor', {
                 numberOfInputs: 2,
                 numberOfOutputs: 1,
                 outputChannelCount: [1]
             });
             
-            // --- INICIO DE LA CORRECCIÓN ---
-
-            // 1. Crear un GainNode para cada entrada. Estos son los "enchufes" reales.
             this.inputNode = audioContext.createGain();
             this.modNode = audioContext.createGain();
 
-            // 2. Conectar estos nodos de entrada al procesador del worklet.
-            this.inputNode.connect(this.workletNode, 0, 0); // Conectar al primer canal de entrada (0) del worklet
-            this.modNode.connect(this.workletNode, 0, 1);   // Conectar al segundo canal de entrada (1) del worklet
+            this.inputNode.connect(this.workletNode, 0, 0);
+            this.modNode.connect(this.workletNode, 0, 1);
 
-            // 3. Asignar los GainNodes como los 'targets' para las conexiones externas.
+            // Conectores a la izquierda
             this.inputs = {
-                'In': { x: 40, y: this.height, type: 'audio', target: this.inputNode, orientation: 'vertical' },
-                'Mod': { x: 110, y: this.height, type: 'audio', target: this.modNode, orientation: 'vertical' }
+                'In': { x: 0, y: this.height / 3, type: 'audio', target: this.inputNode, orientation: 'horizontal' },
+                'Mod': { x: 0, y: (this.height / 3) * 2, type: 'audio', target: this.modNode, orientation: 'horizontal' }
             };
 
-            // --- FIN DE LA CORRECCIÓN ---
-
+            // Conector a la derecha
             this.outputs = {
-                'Out': { x: this.width / 2, y: 0, type: 'audio', source: this.workletNode, orientation: 'vertical' }
+                'Out': { x: this.width, y: this.height / 2, type: 'audio', source: this.workletNode, orientation: 'horizontal' }
             };
 
-            // Conexión para mantener el procesador activo y evitar que se recolecte como basura.
             this.keepAliveNode = audioContext.createGain();
             this.keepAliveNode.gain.value = 0;
             this.workletNode.connect(this.keepAliveNode);
@@ -58,7 +51,6 @@ export class RingMod {
     }
 
     disconnect() {
-        // Desconectar todos los nodos para liberar recursos.
         this.inputNode?.disconnect();
         this.modNode?.disconnect();
         this.workletNode?.disconnect();
@@ -76,9 +68,31 @@ export class RingMod {
         ctx.strokeRect(0, 0, this.width, this.height);
 
         ctx.fillStyle = '#E0E0E0';
-        ctx.font = '14px Arial';
+        ctx.font = '18px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('MOD. ANILLO', this.width / 2, this.height / 2);
+        ctx.fillText('RM', this.width / 2, 25);
+
+        // Dibuja el símbolo del modulador en anillo (cuadrado con X)
+        ctx.save();
+        // Centra el símbolo verticalmente en el módulo
+        ctx.translate(this.width / 2, this.height / 2);
+        
+        const symbolSize = 60; // Símbolo más grande
+        ctx.strokeStyle = '#E0E0E0';
+        ctx.lineWidth = 2.5;
+
+        // Dibuja el cuadrado
+        ctx.strokeRect(-symbolSize / 2, -symbolSize / 2, symbolSize, symbolSize);
+
+        // Dibuja la X
+        ctx.beginPath();
+        ctx.moveTo(-symbolSize / 2, -symbolSize / 2);
+        ctx.lineTo(symbolSize / 2, symbolSize / 2);
+        ctx.moveTo(symbolSize / 2, -symbolSize / 2);
+        ctx.lineTo(-symbolSize / 2, symbolSize / 2);
+        ctx.stroke();
+        
+        ctx.restore();
 
         this.drawConnectors(ctx, hoveredConnectorInfo);
         ctx.restore();
@@ -87,8 +101,7 @@ export class RingMod {
     drawConnectors(ctx, hovered) {
         const connectorRadius = 8;
         ctx.font = '10px Arial';
-        ctx.textAlign = 'center';
-
+        
         Object.entries(this.inputs).forEach(([name, props]) => {
             const isHovered = hovered?.module === this && hovered.connector.name === name;
             ctx.beginPath();
@@ -96,7 +109,8 @@ export class RingMod {
             ctx.fillStyle = isHovered ? 'white' : '#4a90e2';
             ctx.fill();
             ctx.fillStyle = '#E0E0E0';
-            ctx.fillText(name, props.x, props.y + connectorRadius + 12);
+            ctx.textAlign = 'left';
+            ctx.fillText(name, props.x + connectorRadius + 4, props.y + 4);
         });
 
         Object.entries(this.outputs).forEach(([name, props]) => {
@@ -109,7 +123,8 @@ export class RingMod {
             ctx.lineWidth = 1.5;
             ctx.stroke();
             ctx.fillStyle = '#E0E0E0';
-            ctx.fillText(name, props.x, props.y - connectorRadius - 4);
+            ctx.textAlign = 'right';
+            ctx.fillText(name, props.x - connectorRadius - 4, props.y + 4);
         });
     }
 

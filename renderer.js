@@ -523,7 +523,7 @@ async function setup() {
       id: 'output-main',
       x: canvas.width / 2 - 50, y: 50, width: 100, height: 80, 
       isPermanent: true, type: 'Output',
-      inputs: { 'audio': { x: 50, y: 0, type: 'audio', target: audioContext.destination, orientation: 'vertical' } },
+      inputs: { 'audio': { x: 0, y: 40, type: 'audio', target: audioContext.destination, orientation: 'horizontal' } },
       outputs: {},
       draw: function(ctx, isSelected) {
         ctx.save();
@@ -533,10 +533,37 @@ async function setup() {
         ctx.lineWidth = 2;
         ctx.fillRect(0, 0, this.width, this.height);
         ctx.strokeRect(0, 0, this.width, this.height);
+        
+        // Dibuja el icono del altavoz
         ctx.fillStyle = '#E0E0E0';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('SALIDA', this.width / 2, this.height / 2 + 5);
+        const speakerX = this.width / 2;
+        const speakerY = this.height / 2;
+        ctx.beginPath();
+        ctx.moveTo(speakerX - 20, speakerY - 15);
+        ctx.lineTo(speakerX - 5, speakerY - 15);
+        ctx.lineTo(speakerX + 10, speakerY - 25);
+        ctx.lineTo(speakerX + 10, speakerY + 25);
+        ctx.lineTo(speakerX - 5, speakerY + 15);
+        ctx.lineTo(speakerX - 20, speakerY + 15);
+        ctx.closePath();
+        ctx.fill();
+
+        // Dibuja las ondas de sonido
+        ctx.strokeStyle = '#E0E0E0';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 3; i++) {
+            ctx.beginPath();
+            ctx.arc(speakerX + 15, speakerY, 8 + i * 6, -Math.PI / 4, Math.PI / 4);
+            ctx.stroke();
+        }
+
+        // Dibuja el conector de entrada
+        const connector = this.inputs.audio;
+        ctx.beginPath();
+        ctx.arc(connector.x, connector.y, 8, 0, Math.PI * 2);
+        ctx.fillStyle = '#4a90e2';
+        ctx.fill();
+
         ctx.restore();
       },
       getConnectorAt: function(x, y) {
