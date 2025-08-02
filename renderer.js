@@ -14,6 +14,7 @@ import { Osciloscopio } from './modules/Osciloscopio.js';
 import { Delay } from './modules/Delay.js';
 import { Compressor } from './modules/Compressor.js';
 import { Reverb } from './modules/Reverb.js';
+import { MathModule } from './modules/Math.js';
 
 const { dialog } = require('@electron/remote');
 const fs = require('fs');
@@ -26,7 +27,7 @@ const patchContextMenu = document.getElementById('patch-context-menu');
 const MODULE_CLASSES = { 
   VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod, 
   SampleAndHold, Sequencer, Osciloscopio, Delay, 
-  Compressor, Reverb, Keyboard 
+  Compressor, Reverb, Keyboard, Math: MathModule
 };
 
 let modules = [];
@@ -63,6 +64,7 @@ async function initAudioContext() {
     await audioContext.audioWorklet.addModule('./worklets/ring-mod-processor.js');
     await audioContext.audioWorklet.addModule('./worklets/sequencer-processor.js');
     await audioContext.audioWorklet.addModule('./worklets/adsr-processor.js');
+    await audioContext.audioWorklet.addModule('./worklets/math-processor.js');
     
     audioContextReady = true;
     console.log('AudioContext initialized successfully');

@@ -30,6 +30,12 @@ export class VCO {
         this.activeSource = this.oscillator;
         this.activeSource.connect(this.output);
 
+        // Conexión para mantener el procesador activo
+        this.keepAliveNode = audioContext.createGain();
+        this.keepAliveNode.gain.value = 0;
+        this.output.connect(this.keepAliveNode);
+        this.keepAliveNode.connect(audioContext.destination);
+
         this.inputs = {
             '1V/Oct': { x: 30, y: this.height, type: 'cv', target: this.oscillator.frequency, orientation: 'vertical' },
             'FM': { x: 80, y: this.height, type: 'cv', target: this.oscillator.frequency, orientation: 'vertical' },
@@ -304,6 +310,7 @@ export class VCO {
         this.oscillator.disconnect();
         this.noise.disconnect();
         this.output.disconnect();
+        this.keepAliveNode?.disconnect();
         // Asegurarse de desconectar AudioParams si alguna vez los conectas a otras fuentes CV
         // Actualmente, solo son destinos, así que no es necesario desconectarlos de aquí.
     }

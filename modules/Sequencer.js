@@ -8,7 +8,7 @@ export class Sequencer {
         this.x = x;
         this.y = y;
         this.width = 500;
-        this.height = 320;
+        this.height = 430; // Aumentamos la altura de nuevo
 
         this.params = {
             tempo: initialState.tempo || 120,
@@ -119,7 +119,7 @@ export class Sequencer {
                 }
             }
         }
-        const stepWidth = 28, stepSpacing = 2, switchY = 185;
+        const stepWidth = 28, stepSpacing = 2, switchY = 295; // Ajustar Y del switch
         for (let i = 0; i < 16; i++) {
             const stepX = 10 + i * (stepWidth + stepSpacing);
             const switchRect = { x: stepX, y: switchY, width: stepWidth, height: 15 };
@@ -143,10 +143,11 @@ export class Sequencer {
         const stepWidth = 28, stepSpacing = 2;
         for (let i = 0; i < 16; i++) {
             const stepX = 10 + i * (stepWidth + stepSpacing);
-            if (this.isInside(localPos, { x: stepX, y: 50, width: stepWidth, height: 80 })) {
+            // Ajustar hitboxes de los sliders
+            if (this.isInside(localPos, { x: stepX, y: 50, width: stepWidth, height: 160 })) {
                 this.activeControl = `cv-${i}`; return true;
             }
-            if (this.isInside(localPos, { x: stepX, y: 140, width: stepWidth, height: 30 })) {
+            if (this.isInside(localPos, { x: stepX, y: 220, width: stepWidth, height: 60 })) {
                 this.activeControl = `gate-${i}`; return true;
             }
         }
@@ -174,16 +175,64 @@ export class Sequencer {
             const index = parseInt(indexStr, 10);
             const localY = worldPos.y - this.y;
             let rect, min, max, paramArray;
-            if (type === 'cv') [rect, min, max, paramArray] = [{ y: 50, h: 80 }, 0, 1, 'sequence'];
-            else if (type === 'gate') [rect, min, max, paramArray] = [{ y: 140, h: 30 }, 0.01, 1, 'gateLengths'];
+            // Ajustar rectángulos para el cálculo del valor del slider
+            if (type === 'cv') [rect, min, max, paramArray] = [{ y: 50, h: 160 }, 0, 1, 'sequence'];
+            else if (type === 'gate') [rect, min, max, paramArray] = [{ y: 220, h: 60 }, 0.01, 1, 'gateLengths'];
             if (!rect) return;
             let normVal = (rect.y + rect.h - localY) / rect.h;
             this.params[paramArray][index] = min + Math.max(0, Math.min(1, normVal)) * (max - min);
         }
     }
 
-    draw(ctx, isSelected, hoveredConnectorInfo) { ctx.save(); ctx.translate(this.x, this.y); ctx.fillStyle = '#222'; ctx.strokeStyle = isSelected ? '#aaffff' : '#E0E0E0'; ctx.lineWidth = 2; ctx.fillRect(0, 0, this.width, this.height); ctx.strokeRect(0, 0, this.width, this.height); ctx.fillStyle = '#E0E0E0'; ctx.font = '14px Arial'; ctx.textAlign = 'center'; ctx.fillText('SEQUENCER', this.width / 2, 22); const stepWidth = 28, stepSpacing = 2; for (let i = 0; i < 16; i++) this.drawStep(ctx, i, 10 + i * (stepWidth + stepSpacing), 40, stepWidth); const controlsY = 240; this.drawKnob(ctx, 'tempo', 'TEMPO', 50, controlsY, 20, 300, this.params.tempo); this.drawButton(ctx, 'run/stop', this.params.running ? 'STOP' : 'START', 120, controlsY, 60, 30); this.drawSelector(ctx, 'direction', 'DIR', 210, controlsY, 60, 30, this.directionModes[this.params.direction]); this.drawKnob(ctx, 'numberOfSteps', 'STEPS', 300, controlsY, 1, 16, this.params.numberOfSteps); this.drawConnectors(ctx, hoveredConnectorInfo); ctx.restore(); }
-    drawStep(ctx, index, x, y, width) { ctx.fillStyle = this.params.running && this.currentStep === index ? '#ff80ab' : '#555'; ctx.fillRect(x, y, width, 5); this.drawVerticalSlider(ctx, `cv-${index}`, x + width / 2, y + 10, 80, 0, 1, this.params.sequence[index]); this.drawVerticalSlider(ctx, `gate-${index}`, x + width / 2, y + 100, 30, 0.01, 1, this.params.gateLengths[index]); const state = this.params.stepStates[index], switchY = y + 145; ctx.fillStyle = state === 0 ? '#4a90e2' : (state === 1 ? '#777' : '#E0E0E0'); ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center'; ctx.fillText(state === 0 ? 'ON' : (state === 1 ? 'OFF' : 'SKIP'), x + width / 2, switchY); }
+    draw(ctx, isSelected, hoveredConnectorInfo) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = '#222';
+        ctx.strokeStyle = isSelected ? '#aaffff' : '#E0E0E0';
+        ctx.lineWidth = 2;
+        ctx.fillRect(0, 0, this.width, this.height);
+        ctx.strokeRect(0, 0, this.width, this.height);
+        ctx.fillStyle = '#E0E0E0';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('SEQUENCER', this.width / 2, 22);
+        const stepWidth = 28, stepSpacing = 2;
+        for (let i = 0; i < 16; i++) {
+            this.drawStep(ctx, i, 10 + i * (stepWidth + stepSpacing), 40, stepWidth);
+        }
+        const controlsY = 350; // Bajar los controles
+        const tempoKnobX = 50;
+        const startButtonX = 120;
+        const dirSelectorX = 210;
+        const buttonWidth = 60;
+        
+        const midPoint = startButtonX + buttonWidth + (dirSelectorX - (startButtonX + buttonWidth)) / 2;
+        const tempoDist = midPoint - tempoKnobX;
+        const stepsKnobX = midPoint + tempoDist;
+
+        this.drawKnob(ctx, 'tempo', 'TEMPO', tempoKnobX, controlsY, 20, 300, this.params.tempo);
+        this.drawButton(ctx, 'run/stop', this.params.running ? 'STOP' : 'START', startButtonX, controlsY, buttonWidth, 30);
+        this.drawSelector(ctx, 'direction', 'DIR', dirSelectorX, controlsY, buttonWidth, 30, this.directionModes[this.params.direction]);
+        this.drawKnob(ctx, 'numberOfSteps', 'STEPS', stepsKnobX, controlsY, 1, 16, this.params.numberOfSteps);
+        this.drawConnectors(ctx, hoveredConnectorInfo);
+        ctx.restore();
+    }
+    
+    drawStep(ctx, index, x, y, width) {
+        ctx.fillStyle = this.params.running && this.currentStep === index ? '#ff80ab' : '#555';
+        ctx.fillRect(x, y, width, 5);
+        // CV Slider
+        this.drawVerticalSlider(ctx, `cv-${index}`, x + width / 2, y + 10, 160, 0, 1, this.params.sequence[index]);
+        // Gate Slider (más alto)
+        this.drawVerticalSlider(ctx, `gate-${index}`, x + width / 2, y + 180, 60, 0.01, 1, this.params.gateLengths[index]);
+        // Switch (debajo de ambos sliders)
+        const state = this.params.stepStates[index], switchY = y + 255;
+        ctx.fillStyle = state === 0 ? '#4a90e2' : (state === 1 ? '#777' : '#E0E0E0');
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(state === 0 ? 'ON' : (state === 1 ? 'OFF' : 'SKIP'), x + width / 2, switchY);
+    }
+
     drawVerticalSlider(ctx, paramName, x, y, height, minVal, maxVal, currentValue) { const knobRadius = 4; ctx.strokeStyle = '#555'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + height); ctx.stroke(); const normalizedValue = (currentValue - minVal) / (maxVal - minVal); const knobY = y + height - (normalizedValue * height); ctx.beginPath(); ctx.arc(x, knobY, knobRadius, 0, Math.PI * 2); ctx.fillStyle = this.activeControl === paramName ? '#aaffff' : '#4a90e2'; ctx.fill(); }
     drawKnob(ctx, paramName, label, x, y, min, max, value) { const knobRadius = 18; const angleRange = Math.PI * 1.5; const startAngle = Math.PI * 0.75; const normalizedValue = (value - min) / (max - min); const angle = startAngle + normalizedValue * angleRange; ctx.font = '10px Arial'; ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'center'; ctx.fillText(label, x, y - knobRadius - 5); ctx.fillText(paramName === 'numberOfSteps' ? Math.round(value) : value.toFixed(0), x, y + knobRadius + 12); ctx.strokeStyle = '#555'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, knobRadius, startAngle, startAngle + angleRange); ctx.stroke(); ctx.strokeStyle = '#4a90e2'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(angle) * knobRadius, y + Math.sin(angle) * knobRadius); ctx.stroke(); this.hotspots[paramName] = { x: x - knobRadius, y: y - knobRadius, width: knobRadius * 2, height: knobRadius * 2, min, max, type: 'knob' }; }
     drawButton(ctx, paramName, text, x, y, w, h) { ctx.fillStyle = this.params.running ? '#4a90e2' : '#777'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#E0E0E0'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, x + w / 2, y + h / 2); this.hotspots[paramName] = { x, y, width: w, height: h, type: 'button' }; }

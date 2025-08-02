@@ -44,6 +44,12 @@ export class LFO {
         this.gateGain.connect(this.outputScaler);
         this.oscillator.start();
         
+        // Conexión para mantener el procesador activo
+        this.keepAliveNode = audioContext.createGain();
+        this.keepAliveNode.gain.value = 0;
+        this.outputScaler.connect(this.keepAliveNode);
+        this.keepAliveNode.connect(audioContext.destination);
+
         this.activeControl = null;
         this.paramHotspots = {};
         this.waveforms = ['sine', 'square', 'sawtooth', 'triangle', 'pulse', 'noise'];
@@ -94,11 +100,11 @@ export class LFO {
         
         this.drawVerticalSlider(ctx, 'depth', this.width - 30, 60, 120, 0.01, 1000, this.depth.gain.value, true);
 
-        // Debuxar selector de forma de onda
+        // Debuxar selector de forma de onda (con tamaño de VCO)
         ctx.beginPath();
-        ctx.arc(this.width / 2, this.height / 2, 15, 0, Math.PI * 2);
+        ctx.arc(this.width / 2, this.height / 2, 25, 0, Math.PI * 2);
         ctx.stroke();
-        this.drawWaveform(ctx, this.width / 2, this.height / 2, 12);
+        this.drawWaveform(ctx, this.width / 2, this.height / 2, 18);
 
         ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
@@ -145,42 +151,37 @@ export class LFO {
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         const type = this.waveforms[this.currentWaveformIndex];
-        switch (type) {
-            case 'sine':
-                ctx.moveTo(cx - radius, cy);
-                ctx.quadraticCurveTo(cx - radius / 2, cy - radius, cx, cy);
-                ctx.quadraticCurveTo(cx + radius / 2, cy + radius, cx + radius, cy);
-                break;
-            case 'square':
-                ctx.moveTo(cx - radius, cy + radius / 2);
-                ctx.lineTo(cx - radius, cy - radius / 2);
-                ctx.lineTo(cx, cy - radius / 2);
-                ctx.lineTo(cx, cy + radius / 2);
-                ctx.lineTo(cx + radius, cy + radius / 2);
-                break;
-            case 'sawtooth':
-                ctx.moveTo(cx - radius, cy + radius / 2);
-                ctx.lineTo(cx + radius, cy - radius / 2);
-                break;
-            case 'triangle':
-                ctx.moveTo(cx - radius, cy + radius / 2);
-                ctx.lineTo(cx, cy - radius / 2);
-                ctx.lineTo(cx + radius, cy + radius / 2);
-                ctx.lineTo(cx - radius, cy + radius / 2);
-                break;
-            case 'pulse':
-                ctx.moveTo(cx - radius, cy + radius / 2);
-                ctx.lineTo(cx - radius, cy - radius / 2);
-                ctx.lineTo(cx + radius / 2, cy - radius / 2);
-                ctx.lineTo(cx + radius / 2, cy + radius / 2);
-                ctx.lineTo(cx + radius, cy + radius / 2);
-                break;
-            case 'noise':
-                for (let i = 0; i < radius * 2; i += 2) {
-                    ctx.moveTo(cx - radius + i, cy - (Math.random() * radius));
-                    ctx.lineTo(cx - radius + i + 1, cy + (Math.random() * radius));
-                }
-                break;
+        if (type === 'noise') {
+            ctx.font = 'bold 30px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('*', cx, cy);
+        } else if (type === 'sawtooth') {
+            ctx.moveTo(cx - radius, cy + radius/2);
+            ctx.lineTo(cx, cy - radius);
+            ctx.lineTo(cx, cy + radius);
+            ctx.lineTo(cx + radius, cy - radius/2);
+        } else if (type === 'square') {
+            ctx.moveTo(cx - radius, cy + radius/2);
+            ctx.lineTo(cx - radius, cy - radius/2);
+            ctx.lineTo(cx, cy - radius/2);
+            ctx.lineTo(cx, cy + radius/2);
+            ctx.lineTo(cx + radius, cy + radius/2);
+        } else if (type === 'sine') {
+             ctx.moveTo(cx - radius, cy);
+             ctx.quadraticCurveTo(cx - radius/2, cy - radius, cx, cy);
+             ctx.quadraticCurveTo(cx + radius/2, cy + radius, cx + radius, cy);
+        } else if (type === 'triangle') {
+            ctx.moveTo(cx - radius, cy + radius/2);
+            ctx.lineTo(cx - radius/2, cy - radius/2);
+            ctx.lineTo(cx + radius/2, cy + radius/2);
+            ctx.lineTo(cx + radius, cy - radius/2);
+        } else if (type === 'pulse') { // Mantemos o pulso específico do LFO
+            ctx.moveTo(cx - radius, cy + radius / 2);
+            ctx.lineTo(cx - radius, cy - radius / 2);
+            ctx.lineTo(cx + radius / 2, cy - radius / 2);
+            ctx.lineTo(cx + radius / 2, cy + radius / 2);
+            ctx.lineTo(cx + radius, cy + radius / 2);
         }
         ctx.stroke();
         ctx.restore();
@@ -242,13 +243,12 @@ export class LFO {
         const localX = x - this.x;
         const localY = y - this.y;
         const symbolX = this.width / 2;
-        const symbolY = this.height / 2; // Coincidir con la posición de dibujo
+        const symbolY = this.height / 2;
         const dist = Math.sqrt(Math.pow(localX - symbolX, 2) + Math.pow(localY - symbolY, 2));
-        console.log(`LFO handleClick: localX=${localX}, localY=${localY}, symbolX=${symbolX}, symbolY=${symbolY}, dist=${dist}`);
-        if (dist < 20) {
+        
+        if (dist < 25) { // Aumentamos o radio de clic para coincidir co novo tamaño
             const newIndex = (this.currentWaveformIndex + 1) % this.waveforms.length;
             this.setWaveform(this.waveforms[newIndex]);
-            console.log(`LFO: Waveform changed to ${this.waveforms[newIndex]}`);
             return true;
         }
         return false;
@@ -314,6 +314,7 @@ export class LFO {
         this.oscillator.disconnect();
         this.gateGain.disconnect();
         this.outputScaler.disconnect();
+        this.keepAliveNode?.disconnect();
     }
 
     getState() {

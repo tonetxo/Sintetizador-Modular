@@ -10,42 +10,32 @@
     {
       "id": "output-main",
       "type": "Output",
-      "x": 750,
-      "y": 50,
+      "x": 1766.794539956569,
+      "y": 24.91279216465032,
       "isPermanent": true
     },
     {
       "id": "vco-1753909969657",
       "type": "VCO",
-      "x": 428.9999999999999,
-      "y": 78.00000000000003,
-      "waveform": "sawtooth",
+      "x": -148.2000000000001,
+      "y": -13.40000000000002,
+      "waveform": "square",
       "detuneValue": 0
-    },
-    {
-      "id": "adsr-1753909971685",
-      "type": "ADSR",
-      "x": 594.9999999999999,
-      "y": 342,
-      "attack": 0.01,
-      "decay": 0.1,
-      "sustain": 0.8,
-      "release": 0.2
     },
     {
       "id": "vca-1753909974342",
       "type": "VCA",
-      "x": 881.9999999999999,
-      "y": 128
+      "x": 560.9999999999999,
+      "y": -32
     },
     {
       "id": "sequencer-1753980160303",
       "type": "Sequencer",
-      "x": -133.22264996802187,
-      "y": 320.1698654463492,
+      "x": -735.2226499680219,
+      "y": 223.1698654463492,
       "tempo": 100.51136363636371,
       "direction": 1,
-      "steps": 16,
+      "numberOfSteps": 16,
       "running": false,
       "sequence": [
         0.5,
@@ -58,7 +48,7 @@
         0.5,
         0.5,
         0.5,
-        0.914623318079365,
+        0.8014473182125819,
         0.8646233180793651,
         0.5,
         0.5,
@@ -91,11 +81,11 @@
         0,
         0,
         0,
+        1,
+        1,
         0,
         0,
-        0,
-        0,
-        0,
+        1,
         0,
         0,
         0,
@@ -105,8 +95,8 @@
     {
       "id": "osc-1754072523958",
       "type": "Osciloscopio",
-      "x": 76,
-      "y": 80
+      "x": -420,
+      "y": -56
     },
     {
       "id": "osc-1754072618655",
@@ -117,28 +107,116 @@
     {
       "id": "osc-1754073393682",
       "type": "Osciloscopio",
-      "x": 1181,
-      "y": 276
+      "x": 991,
+      "y": 289
+    },
+    {
+      "id": "adsr-1754099841905",
+      "type": "ADSR",
+      "x": 502,
+      "y": 332,
+      "attack": 0.30020833333333335,
+      "decay": 0.1,
+      "sustain": 0.8,
+      "release": 0.2
+    },
+    {
+      "id": "delay-1754140357726",
+      "type": "Delay",
+      "x": 836.4513567413142,
+      "y": -88.68632127259502,
+      "time": 1.8160053863128744,
+      "feedback": 0.25180906723197605,
+      "mix": 0.2598952921386081
+    },
+    {
+      "id": "ringmod-1754140698621",
+      "type": "RingMod",
+      "x": 304.00581464595325,
+      "y": -307.40874008854314
+    },
+    {
+      "id": "reverb-1754140720072",
+      "type": "Reverb",
+      "x": 1136.0058146459528,
+      "y": -96.59055827036141,
+      "mix": 0.5,
+      "decay": 3.8687500000000052
+    },
+    {
+      "id": "compressor-1754141881253",
+      "type": "Compressor",
+      "x": 1398,
+      "y": -126,
+      "threshold": -22.5,
+      "ratio": 5.829166666666667,
+      "attack": 0.475,
+      "release": 0.25
+    },
+    {
+      "id": "vcf-1754141914697",
+      "type": "VCF",
+      "x": 306,
+      "y": -42,
+      "cutoff": 238.9476318359375,
+      "resonance": 13.772727012634277,
+      "filterType": "lowpass"
+    },
+    {
+      "id": "sah-1754142095390",
+      "type": "SampleAndHold",
+      "x": 86,
+      "y": 321
+    },
+    {
+      "id": "lfo-1754142745355",
+      "type": "LFO",
+      "x": -128.49999999999994,
+      "y": 259,
+      "rate": 440,
+      "depth": 3,
+      "waveform": "sawtooth"
+    },
+    {
+      "id": "math-1754143849320",
+      "type": "Math",
+      "x": 292,
+      "y": 338,
+      "operation": 0
+    },
+    {
+      "id": "vco-1754143887710",
+      "type": "VCO",
+      "x": -142,
+      "y": -300,
+      "waveform": "sawtooth",
+      "detuneValue": 0
+    },
+    {
+      "id": "mixer-1754143906768",
+      "type": "Mixer",
+      "x": 83,
+      "y": -146,
+      "levels": [
+        1,
+        0,
+        0,
+        0
+      ]
     }
   ],
   "connections": [
     {
-      "fromId": "adsr-1753909971685",
-      "fromConnector": "CV",
-      "toId": "vca-1753909974342",
-      "toConnector": "CV 1"
+      "fromId": "sequencer-1753980160303",
+      "fromConnector": "DISPARO",
+      "toId": "osc-1754072618655",
+      "toConnector": "input"
     },
     {
-      "fromId": "vco-1753909969657",
-      "fromConnector": "audio",
-      "toId": "vca-1753909974342",
-      "toConnector": "audio"
-    },
-    {
-      "fromId": "vca-1753909974342",
-      "fromConnector": "audio",
-      "toId": "output-main",
-      "toConnector": "audio"
+      "fromId": "sequencer-1753980160303",
+      "fromConnector": "TENSION",
+      "toId": "osc-1754072523958",
+      "toConnector": "input"
     },
     {
       "fromId": "sequencer-1753980160303",
@@ -149,26 +227,86 @@
     {
       "fromId": "sequencer-1753980160303",
       "fromConnector": "DISPARO",
-      "toId": "adsr-1753909971685",
+      "toId": "adsr-1754099841905",
       "toConnector": "Gate"
     },
     {
-      "fromId": "sequencer-1753980160303",
-      "fromConnector": "DISPARO",
-      "toId": "osc-1754072618655",
-      "toConnector": "input"
+      "fromId": "adsr-1754099841905",
+      "fromConnector": "CV",
+      "toId": "vca-1753909974342",
+      "toConnector": "CV 1"
     },
     {
-      "fromId": "adsr-1753909971685",
+      "fromId": "adsr-1754099841905",
       "fromConnector": "CV",
       "toId": "osc-1754073393682",
       "toConnector": "input"
     },
     {
+      "fromId": "vca-1753909974342",
+      "fromConnector": "audio",
+      "toId": "delay-1754140357726",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "delay-1754140357726",
+      "fromConnector": "audio",
+      "toId": "reverb-1754140720072",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "vcf-1754141914697",
+      "fromConnector": "audio",
+      "toId": "vca-1753909974342",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "reverb-1754140720072",
+      "fromConnector": "audio",
+      "toId": "compressor-1754141881253",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "compressor-1754141881253",
+      "fromConnector": "audio",
+      "toId": "output-main",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "TENSION",
+      "toId": "math-1754143849320",
+      "toConnector": "A"
+    },
+    {
       "fromId": "sequencer-1753980160303",
       "fromConnector": "TENSION",
-      "toId": "osc-1754072523958",
-      "toConnector": "input"
+      "toId": "math-1754143849320",
+      "toConnector": "B"
+    },
+    {
+      "fromId": "math-1754143849320",
+      "fromConnector": "Out",
+      "toId": "vco-1754143887710",
+      "toConnector": "1V/Oct"
+    },
+    {
+      "fromId": "vco-1754143887710",
+      "fromConnector": "audio",
+      "toId": "mixer-1754143906768",
+      "toConnector": "In 1"
+    },
+    {
+      "fromId": "vco-1753909969657",
+      "fromConnector": "audio",
+      "toId": "mixer-1754143906768",
+      "toConnector": "In 2"
+    },
+    {
+      "fromId": "mixer-1754143906768",
+      "fromConnector": "Out",
+      "toId": "vcf-1754141914697",
+      "toConnector": "audio"
     }
   ]
 }

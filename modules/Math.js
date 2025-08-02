@@ -1,37 +1,44 @@
-// modules/SampleAndHold.js
+// modules/Math.js
 import { audioContext } from './AudioContext.js';
 
-const workletPromise = audioContext.audioWorklet.addModule('worklets/sample-and-hold-processor.js')
-    .catch(e => console.error('Error loading S&H AudioWorklet:', e));
+const workletPromise = audioContext.audioWorklet.addModule('worklets/math-processor.js')
+    .catch(e => console.error('Error loading Math AudioWorklet:', e));
 
-export class SampleAndHold {
+export class MathModule {
     constructor(x, y, id = null, initialState = {}) {
-        this.id = id || `sah-${Date.now()}`;
+        this.id = id || `math-${Date.now()}`;
+        this.type = 'Math';
         this.x = x;
         this.y = y;
-        this.width = 150; // Igual que RingMod
-        this.height = 150; // Igual que RingMod
-        this.type = 'SampleAndHold';
+        this.width = 120;
+        this.height = 150;
 
+        this.operations = ['A + B', 'A - B', 'A × B', 'MIN', 'MAX'];
+        this.currentOperationIndex = initialState.operation || 0;
+        
         this.node = null;
         this.isReady = false;
 
         this.inputs = {
-            'IN': { x: 0, y: this.height / 3, type: 'cv', target: null, inputIndex: 0, orientation: 'horizontal' },
-            'TRIG': { x: 0, y: (this.height / 3) * 2, type: 'gate', target: null, inputIndex: 1, orientation: 'horizontal' }
+            'A': { x: 0, y: 40, type: 'cv', target: null, inputIndex: 0, orientation: 'horizontal' },
+            'B': { x: 0, y: 110, type: 'cv', target: null, inputIndex: 1, orientation: 'horizontal' }
         };
         this.outputs = {
-            'OUT': { x: this.width, y: this.height / 2, type: 'cv', source: null, orientation: 'horizontal' }
+            'Out': { x: this.width, y: this.height / 2, type: 'cv', source: null, orientation: 'horizontal' }
         };
 
         this.readyPromise = workletPromise.then(() => {
-            this.node = new AudioWorkletNode(audioContext, 'sample-and-hold-processor', {
+            this.node = new AudioWorkletNode(audioContext, 'math-processor', { 
                 numberOfInputs: 2,
+                numberOfOutputs: 1,
+                outputChannelCount: [1]
             });
+            this.operationParam = this.node.parameters.get('operation');
+            this.setOperation(this.currentOperationIndex);
             
-            this.inputs['IN'].target = this.node;
-            this.inputs['TRIG'].target = this.node;
-            this.outputs['OUT'].source = this.node;
+            this.inputs['A'].target = this.node;
+            this.inputs['B'].target = this.node;
+            this.outputs['Out'].source = this.node;
 
             // Conexión para mantener el procesador activo
             this.keepAliveNode = audioContext.createGain();
@@ -41,14 +48,20 @@ export class SampleAndHold {
             
             this.isReady = true;
         }).catch(err => {
-            console.error("S&H Module failed to become ready:", err);
+            console.error("Math Module failed to become ready:", err);
         });
+    }
+
+    setOperation(index) {
+        this.currentOperationIndex = index;
+        if (this.operationParam) {
+            this.operationParam.setValueAtTime(index, audioContext.currentTime);
+        }
     }
 
     draw(ctx, isSelected, hoveredConnectorInfo) {
         ctx.save();
         ctx.translate(this.x, this.y);
-
         ctx.globalAlpha = this.isReady ? 1.0 : 0.5;
 
         ctx.fillStyle = '#222';
@@ -58,33 +71,13 @@ export class SampleAndHold {
         ctx.strokeRect(0, 0, this.width, this.height);
 
         ctx.fillStyle = '#E0E0E0';
-        ctx.font = '18px Arial';
+        ctx.font = '14px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('S&H', this.width / 2, 25);
-        
+        ctx.fillText('MATES', this.width / 2, 22);
+
         if (this.isReady) {
-            ctx.save();
-            ctx.translate(this.width / 2, this.height / 2 + 10);
-            
-            ctx.strokeStyle = '#E0E0E0';
-            ctx.lineWidth = 2.5;
-            ctx.beginPath();
-            
-            const step = 20;
-            const totalWidth = 3 * step;
-            const totalHeight = 2 * step;
-            const startX = -totalWidth / 2;
-            const startY = totalHeight / 2;
-
-            ctx.moveTo(startX, startY);
-            ctx.lineTo(startX + step, startY);
-            ctx.lineTo(startX + step, startY - step);
-            ctx.lineTo(startX + 2 * step, startY - step);
-            ctx.lineTo(startX + 2 * step, startY - 2 * step);
-            ctx.lineTo(startX + 3 * step, startY - 2 * step);
-            ctx.stroke();
-            ctx.restore();
-
+            ctx.font = 'bold 20px Arial';
+            ctx.fillText(this.operations[this.currentOperationIndex], this.width / 2, this.height / 2 + 8);
         } else {
             ctx.font = '12px Arial';
             ctx.fillStyle = '#ff80ab';
@@ -97,13 +90,10 @@ export class SampleAndHold {
 
     drawConnectors(ctx, hovered) {
         if (!this.isReady) return;
-
         ctx.globalAlpha = 1.0;
-        const isHovered = (type, name) => hovered && hovered.module === this && hovered.connector.type === type && hovered.connector.name === name;
+        const isHovered = (type, name) => hovered && hovered.module === this && hovered.connector.name === name;
         const connectorRadius = 8;
         ctx.font = '10px Arial';
-        ctx.fillStyle = '#E0E0E0';
-        ctx.textAlign = 'left';
 
         Object.entries(this.inputs).forEach(([name, props]) => {
             const x = this.x + props.x;
@@ -113,6 +103,7 @@ export class SampleAndHold {
             ctx.fillStyle = isHovered('input', name) ? 'white' : '#4a90e2';
             ctx.fill();
             ctx.fillStyle = '#E0E0E0';
+            ctx.textAlign = 'left';
             ctx.fillText(name, x + connectorRadius + 4, y + 4);
         });
 
@@ -132,15 +123,26 @@ export class SampleAndHold {
         });
     }
 
+    handleClick(x, y) {
+        const localX = x - this.x;
+        const localY = y - this.y;
+        // Área de clic en el centro del módulo
+        if (localX > 20 && localX < this.width - 20 && localY > 40 && localY < this.height - 40) {
+            const newIndex = (this.currentOperationIndex + 1) % this.operations.length;
+            this.setOperation(newIndex);
+            return true;
+        }
+        return false;
+    }
+
     getConnectorAt(x, y) {
         if (!this.isReady) return null;
-
         for (const [name, props] of Object.entries(this.inputs)) {
-            if (Math.sqrt(Math.pow(x - (this.x + props.x), 2) + Math.pow(y - (this.y + props.y), 2)) < 9)
+            if (Math.hypot(x - (this.x + props.x), y - (this.y + props.y)) < 9)
                 return { name, type: 'input', props, module: this };
         }
         for (const [name, props] of Object.entries(this.outputs)) {
-            if (Math.sqrt(Math.pow(x - (this.x + props.x), 2) + Math.pow(y - (this.y + props.y), 2)) < 9)
+            if (Math.hypot(x - (this.x + props.x), y - (this.y + props.y)) < 9)
                 return { name, type: 'output', props, module: this };
         }
         return null;
@@ -155,11 +157,20 @@ export class SampleAndHold {
         }
     }
 
-    getState() { return { id: this.id, type: 'SampleAndHold', x: this.x, y: this.y }; }
+    getState() { 
+        return { 
+            id: this.id, 
+            type: this.type, 
+            x: this.x, 
+            y: this.y,
+            operation: this.currentOperationIndex
+        }; 
+    }
 
     setState(state) {
         this.id = state.id || this.id;
         this.x = state.x;
         this.y = state.y;
+        this.setOperation(state.operation || 0);
     }
 }

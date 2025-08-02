@@ -102,29 +102,34 @@ export class Mixer {
     }
 
     checkInteraction(pos) {
+        const localPos = { x: pos.x - this.x, y: pos.y - this.y };
         for (const [param, rect] of Object.entries(this.paramHotspots)) {
-            const worldRect = { x: this.x + rect.x, y: this.y + rect.y, width: rect.width, height: rect.height };
-            if (pos.x >= worldRect.x && pos.x <= worldRect.x + worldRect.width &&
-                pos.y >= worldRect.y && pos.y <= worldRect.y + worldRect.height) {
+            if (localPos.x >= rect.x && localPos.x <= rect.x + rect.width &&
+                localPos.y >= rect.y && localPos.y <= rect.y + rect.height) {
                 this.activeControl = parseInt(param);
+                this.dragStart = { y: pos.y, value: this.channels[this.activeControl].gain.value };
                 return true;
             }
         }
         return false;
     }
 
-    handleDragInteraction(dx, dy, isFine) {
+    handleDragInteraction(worldPos) {
         if (this.activeControl === null) return;
-        const coarse = 0.01;
-        const fine = 0.001;
-        const sensitivity = -dy * (isFine ? fine : coarse);
-        const channel = this.channels[this.activeControl];
-        const newGain = channel.gain.value + sensitivity;
-        channel.gain.value = Math.max(0, Math.min(2, newGain)); // Limitar entre 0 y 2
+        
+        const dy = this.dragStart.y - worldPos.y;
+        const sensitivity = 0.01;
+        const newGain = this.dragStart.value + dy * sensitivity;
+        const clampedGain = Math.max(0, Math.min(2, newGain));
+
+        if (isFinite(clampedGain)) {
+            this.channels[this.activeControl].gain.value = clampedGain;
+        }
     }
 
     endInteraction() {
         this.activeControl = null;
+        this.dragStart = {};
     }
 
     getConnectorAt(x, y) {
