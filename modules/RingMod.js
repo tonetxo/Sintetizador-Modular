@@ -2,32 +2,67 @@
 import { audioContext } from './AudioContext.js';
 
 export class RingMod {
-    constructor(x, y, id = null, initialState = {}) {
+    constructor(x, y, id = null) {
         this.id = id || `ringmod-${Date.now()}`;
+        this.type = 'RingMod';
         this.x = x;
         this.y = y;
-        this.width = 120;
-        this.height = 120;
-        this.type = 'RingMod';
+        this.width = 150;
+        this.height = 250;
+        
+        this.inputs = {};
+        this.outputs = {};
+        this.readyPromise = this.initWorklet();
+    }
 
-        // Un modulador en anillo es esencialmente un multiplicador de señales.
-        // Se implementa usando un AudioWorkletNode para una multiplicación de cuatro cuadrantes.
-        this.ringModNode = new AudioWorkletNode(audioContext, 'ring-mod-processor', { 
-            numberOfInputs: 2, 
-            numberOfOutputs: 1, 
-            outputChannelCount: [1] 
-        });
-        this.readyPromise = Promise.resolve(); // No async operations here, so resolve immediately
-        console.log(`RingMod ${this.id}: AudioWorkletNode created.`);
+    async initWorklet() {
+        try {
+            // El worklet necesita 2 entradas (señal y modulador) y 1 salida.
+            this.workletNode = new AudioWorkletNode(audioContext, 'ring-mod-processor', {
+                numberOfInputs: 2,
+                numberOfOutputs: 1,
+                outputChannelCount: [1]
+            });
+            
+            // --- INICIO DE LA CORRECCIÓN ---
 
-        this.inputs = {
-            'Portadora': { x: 0, y: 40, type: 'audio', target: this.ringModNode, inputIndex: 0, orientation: 'horizontal' },
-            'Moduladora': { x: 0, y: 80, type: 'audio', target: this.ringModNode, inputIndex: 1, orientation: 'horizontal' }
-        };
-        console.log(`RingMod ${this.id}: Inputs defined. Carrier target: ${this.inputs.Portadora.target}, Modulator target: ${this.inputs.Moduladora.target}`);
-        this.outputs = {
-            'SALIDA': { x: this.width, y: this.height / 2, type: 'audio', source: this.ringModNode, orientation: 'horizontal' }
-        };
+            // 1. Crear un GainNode para cada entrada. Estos son los "enchufes" reales.
+            this.inputNode = audioContext.createGain();
+            this.modNode = audioContext.createGain();
+
+            // 2. Conectar estos nodos de entrada al procesador del worklet.
+            this.inputNode.connect(this.workletNode, 0, 0); // Conectar al primer canal de entrada (0) del worklet
+            this.modNode.connect(this.workletNode, 0, 1);   // Conectar al segundo canal de entrada (1) del worklet
+
+            // 3. Asignar los GainNodes como los 'targets' para las conexiones externas.
+            this.inputs = {
+                'In': { x: 40, y: this.height, type: 'audio', target: this.inputNode, orientation: 'vertical' },
+                'Mod': { x: 110, y: this.height, type: 'audio', target: this.modNode, orientation: 'vertical' }
+            };
+
+            // --- FIN DE LA CORRECCIÓN ---
+
+            this.outputs = {
+                'Out': { x: this.width / 2, y: 0, type: 'audio', source: this.workletNode, orientation: 'vertical' }
+            };
+
+            // Conexión para mantener el procesador activo y evitar que se recolecte como basura.
+            this.keepAliveNode = audioContext.createGain();
+            this.keepAliveNode.gain.value = 0;
+            this.workletNode.connect(this.keepAliveNode);
+            this.keepAliveNode.connect(audioContext.destination);
+
+        } catch (error) {
+            console.error(`[RingMod-${this.id}] Error initializing worklet:`, error);
+        }
+    }
+
+    disconnect() {
+        // Desconectar todos los nodos para liberar recursos.
+        this.inputNode?.disconnect();
+        this.modNode?.disconnect();
+        this.workletNode?.disconnect();
+        this.keepAliveNode?.disconnect();
     }
 
     draw(ctx, isSelected, hoveredConnectorInfo) {
@@ -41,78 +76,60 @@ export class RingMod {
         ctx.strokeRect(0, 0, this.width, this.height);
 
         ctx.fillStyle = '#E0E0E0';
-        ctx.font = '11px Arial';
+        ctx.font = '14px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Mod. Anillo', this.width / 2, 22);
-        
-        // Símbolo 'X'
-        ctx.strokeStyle = '#E0E0E0';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        const margin = 35;
-        ctx.moveTo(margin, margin);
-        ctx.lineTo(this.width - margin, this.height - margin);
-        ctx.moveTo(this.width - margin, margin);
-        ctx.lineTo(margin, this.height - margin);
-        ctx.stroke();
+        ctx.fillText('MOD. ANILLO', this.width / 2, this.height / 2);
 
-        ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
+        ctx.restore();
     }
-
+    
     drawConnectors(ctx, hovered) {
-        const isHovered = (type, name) => hovered && hovered.module === this && hovered.connector.type === type && hovered.connector.name === name;
         const connectorRadius = 8;
         ctx.font = '10px Arial';
-        ctx.fillStyle = '#E0E0E0';
-        ctx.textAlign = 'left';
+        ctx.textAlign = 'center';
 
         Object.entries(this.inputs).forEach(([name, props]) => {
-            const x = this.x + props.x;
-            const y = this.y + props.y;
+            const isHovered = hovered?.module === this && hovered.connector.name === name;
             ctx.beginPath();
-            ctx.arc(x, y, connectorRadius, 0, Math.PI * 2);
-            ctx.fillStyle = isHovered('input', name) ? 'white' : '#4a90e2';
+            ctx.arc(props.x, props.y, connectorRadius, 0, Math.PI * 2);
+            ctx.fillStyle = isHovered ? 'white' : '#4a90e2';
             ctx.fill();
             ctx.fillStyle = '#E0E0E0';
-            ctx.fillText(name, x + connectorRadius + 4, y + 4);
+            ctx.fillText(name, props.x, props.y + connectorRadius + 12);
         });
 
         Object.entries(this.outputs).forEach(([name, props]) => {
-            const x = this.x + props.x;
-            const y = this.y + props.y;
+            const isHovered = hovered?.module === this && hovered.connector.name === name;
             ctx.beginPath();
-            ctx.arc(x, y, connectorRadius, 0, Math.PI * 2);
-            ctx.fillStyle = isHovered('output', name) ? 'white' : '#222';
+            ctx.arc(props.x, props.y, connectorRadius, 0, Math.PI * 2);
+            ctx.fillStyle = isHovered ? 'white' : '#222';
             ctx.fill();
             ctx.strokeStyle = '#4a90e2';
             ctx.lineWidth = 1.5;
             ctx.stroke();
             ctx.fillStyle = '#E0E0E0';
-            ctx.textAlign = 'right';
-            ctx.fillText(name, x - connectorRadius - 4, y + 4);
+            ctx.fillText(name, props.x, props.y - connectorRadius - 4);
         });
     }
 
     getConnectorAt(x, y) {
+        const localX = x - this.x;
+        const localY = y - this.y;
         for (const [name, props] of Object.entries(this.inputs)) {
-            if (Math.sqrt(Math.pow(x - (this.x + props.x), 2) + Math.pow(y - (this.y + props.y), 2)) < 9)
+            if (Math.hypot(localX - props.x, localY - props.y) < 9)
                 return { name, type: 'input', props, module: this };
         }
         for (const [name, props] of Object.entries(this.outputs)) {
-            if (Math.sqrt(Math.pow(x - (this.x + props.x), 2) + Math.pow(y - (this.y + props.y), 2)) < 9)
+            if (Math.hypot(localX - props.x, localY - props.y) < 9)
                 return { name, type: 'output', props, module: this };
         }
         return null;
     }
-    
-    disconnect() {
-        if (this.ringModNode) {
-            this.ringModNode.disconnect();
-        }
-    }
 
-    getState() { return { id: this.id, type: 'RingMod', x: this.x, y: this.y }; }
+    getState() {
+        return { id: this.id, type: this.type, x: this.x, y: this.y };
+    }
 
     setState(state) {
         this.id = state.id || this.id;

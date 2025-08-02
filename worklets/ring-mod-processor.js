@@ -1,39 +1,36 @@
 // worklets/ring-mod-processor.js
+
 class RingModProcessor extends AudioWorkletProcessor {
-    constructor() {
-        super();
+  process(inputs, outputs) {
+    // Obtenemos las dos entradas (señal y modulador) y la salida.
+    const signalInput = inputs[0];
+    const modulatorInput = inputs[1];
+    const output = outputs[0];
+
+    // Nos aseguramos de que ambas entradas estén conectadas.
+    // Si falta alguna, la salida será silencio para evitar errores.
+    if (signalInput.length === 0 || modulatorInput.length === 0) {
+      return true; // Mantenemos el procesador activo.
     }
 
-    process(inputs, outputs, parameters) {
-        const input1 = inputs[0];
-        const input2 = inputs[1];
-        const output = outputs[0];
+    // Iteramos sobre cada canal de audio (normalmente estéreo, 2 canales).
+    for (let channel = 0; channel < output.length; ++channel) {
+      // Usamos el canal correspondiente de cada entrada.
+      const signalChannel = signalInput[channel];
+      const modulatorChannel = modulatorInput[channel];
+      const outputChannel = output[channel];
 
-        if (input1.length > 0 && input2.length > 0) {
-            const input1Channel = input1[0];
-            const input2Channel = input2[0];
-            const outputChannel = output[0];
-
-            for (let i = 0; i < input1Channel.length; i++) {
-                outputChannel[i] = input1Channel[i] * input2Channel[i];
-            }
-        } else if (input1.length > 0) { // If only input1 is connected, pass it through
-            const input1Channel = input1[0];
-            const outputChannel = output[0];
-            for (let i = 0; i < input1Channel.length; i++) {
-                outputChannel[i] = input1Channel[i];
-            }
-        } else if (input2.length > 0) { // If only input2 is connected, pass it through
-            const input2Channel = input2[0];
-            const outputChannel = output[0];
-            for (let i = 0; i < input2Channel.length; i++) {
-                outputChannel[i] = input2Channel[i];
-            }
-        }
-
-
-        return true;
+      // Iteramos sobre cada muestra de audio en el búfer.
+      for (let i = 0; i < outputChannel.length; ++i) {
+        // --- LA MAGIA DE LA MODULACIÓN EN ANILLO ---
+        // Multiplicamos la muestra de la señal por la muestra del modulador.
+        outputChannel[i] = signalChannel[i] * modulatorChannel[i];
+      }
     }
+
+    // Devolvemos 'true' para indicar que el procesador debe seguir ejecutándose.
+    return true;
+  }
 }
 
 registerProcessor('ring-mod-processor', RingModProcessor);

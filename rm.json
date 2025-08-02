@@ -1,0 +1,136 @@
+{
+  "modules": [
+    {
+      "id": "keyboard-main",
+      "type": "Keyboard",
+      "x": -154,
+      "y": 425,
+      "isPermanent": true
+    },
+    {
+      "id": "output-main",
+      "type": "Output",
+      "x": 987,
+      "y": 104,
+      "isPermanent": true
+    },
+    {
+      "id": "vco-1753909969657",
+      "type": "VCO",
+      "x": 225.7999999999999,
+      "y": 222.59999999999997,
+      "waveform": "sine",
+      "detuneValue": -11.3
+    },
+    {
+      "id": "vca-1753909974342",
+      "type": "VCA",
+      "x": 713.9999999999999,
+      "y": 87
+    },
+    {
+      "id": "osc-1754072523958",
+      "type": "Osciloscopio",
+      "x": -142,
+      "y": 79
+    },
+    {
+      "id": "osc-1754072618655",
+      "type": "Osciloscopio",
+      "x": 225,
+      "y": 550
+    },
+    {
+      "id": "osc-1754073393682",
+      "type": "Osciloscopio",
+      "x": 991,
+      "y": 289
+    },
+    {
+      "id": "adsr-1754099841905",
+      "type": "ADSR",
+      "x": 502,
+      "y": 332,
+      "attack": 0.46604166666666663,
+      "decay": 1.35325,
+      "sustain": 0.8,
+      "release": 0.2
+    },
+    {
+      "id": "vco-1754114446331",
+      "type": "VCO",
+      "x": 233,
+      "y": -43,
+      "waveform": "sine",
+      "detuneValue": 21.4
+    },
+    {
+      "id": "ringmod-1754114470340",
+      "type": "RingMod",
+      "x": 499,
+      "y": 48
+    }
+  ],
+  "connections": [
+    {
+      "fromId": "vca-1753909974342",
+      "fromConnector": "audio",
+      "toId": "output-main",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "adsr-1754099841905",
+      "fromConnector": "CV",
+      "toId": "vca-1753909974342",
+      "toConnector": "CV 1"
+    },
+    {
+      "fromId": "adsr-1754099841905",
+      "fromConnector": "CV",
+      "toId": "osc-1754073393682",
+      "toConnector": "input"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "TENSION",
+      "toId": "vco-1753909969657",
+      "toConnector": "1V/Oct"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "adsr-1754099841905",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "TENSION",
+      "toId": "vco-1754114446331",
+      "toConnector": "1V/Oct"
+    },
+    {
+      "fromId": "vco-1754114446331",
+      "fromConnector": "audio",
+      "toId": "ringmod-1754114470340",
+      "toConnector": "Portadora"
+    },
+    {
+      "fromId": "vco-1753909969657",
+      "fromConnector": "audio",
+      "toId": "ringmod-1754114470340",
+      "toConnector": "Moduladora"
+    },
+    {
+      "fromId": "ringmod-1754114470340",
+      "fromConnector": "SALIDA",
+      "toId": "vca-1753909974342",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "vco-1753909969657",
+      "fromConnector": "audio",
+      "toId": "osc-1754072618655",
+      "toConnector": "input"
+    }
+  ]
+}
