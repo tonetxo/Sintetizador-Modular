@@ -1,0 +1,144 @@
+{
+  "modules": [
+    {
+      "id": "keyboard-main",
+      "type": "Keyboard",
+      "x": 490,
+      "y": 725,
+      "isPermanent": true
+    },
+    {
+      "id": "output-main",
+      "type": "Output",
+      "x": 1132,
+      "y": 65,
+      "isPermanent": true
+    },
+    {
+      "tempo": 120,
+      "steps": 16,
+      "gateLength": 0.5,
+      "running": true,
+      "sequence": [
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "stepStates": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "id": "sequencer2-1754084750608",
+      "type": "Sequencer2",
+      "x": 250,
+      "y": 216
+    },
+    {
+      "id": "vco-1754084753225",
+      "type": "VCO",
+      "x": 798,
+      "y": 288,
+      "waveform": "sawtooth",
+      "detuneValue": 0
+    },
+    {
+      "id": "adsr-1754084754994",
+      "type": "ADSR",
+      "x": 775,
+      "y": 558,
+      "attack": 0.01,
+      "decay": 0.1,
+      "sustain": 0.8,
+      "release": 0.2
+    },
+    {
+      "id": "vca-1754084767144",
+      "type": "VCA",
+      "x": 1155,
+      "y": 235
+    },
+    {
+      "id": "osc-1754085002779",
+      "type": "Osciloscopio",
+      "x": 573,
+      "y": 58
+    },
+    {
+      "id": "osc-1754085016458",
+      "type": "Osciloscopio",
+      "x": 457,
+      "y": 542
+    }
+  ],
+  "connections": [
+    {
+      "fromId": "sequencer2-1754084750608",
+      "fromConnector": "CV",
+      "toId": "vco-1754084753225",
+      "toConnector": "1V/Oct"
+    },
+    {
+      "fromId": "sequencer2-1754084750608",
+      "fromConnector": "Gate",
+      "toId": "adsr-1754084754994",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "vco-1754084753225",
+      "fromConnector": "audio",
+      "toId": "vca-1754084767144",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "adsr-1754084754994",
+      "fromConnector": "CV",
+      "toId": "vca-1754084767144",
+      "toConnector": "CV 1"
+    },
+    {
+      "fromId": "vca-1754084767144",
+      "fromConnector": "audio",
+      "toId": "output-main",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "sequencer2-1754084750608",
+      "fromConnector": "CV",
+      "toId": "osc-1754085002779",
+      "toConnector": "input"
+    },
+    {
+      "fromId": "sequencer2-1754084750608",
+      "fromConnector": "Gate",
+      "toId": "osc-1754085016458",
+      "toConnector": "input"
+    }
+  ]
+}

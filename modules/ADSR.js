@@ -37,6 +37,12 @@ export class ADSR {
                 }
             });
 
+            // Keep-alive connection to ensure the process() method is always called
+            this.keepAliveNode = audioContext.createGain();
+            this.keepAliveNode.gain.value = 0;
+            this.workletNode.connect(this.keepAliveNode);
+            this.keepAliveNode.connect(audioContext.destination);
+
             this.inputs = {
                 'Gate': { x: 0, y: this.height / 2, type: 'gate', target: this.workletNode, orientation: 'horizontal' }
             };
@@ -200,6 +206,9 @@ export class ADSR {
     disconnect() {
         if (this.workletNode) {
             this.workletNode.disconnect();
+        }
+        if (this.keepAliveNode) {
+            this.keepAliveNode.disconnect();
         }
     }
 

@@ -3,3 +3,8 @@
 *.jpg
 *.jpeg
 *.gif
+# Dependencias
+/node_modules
+
+# Archivos de build
+/dist
