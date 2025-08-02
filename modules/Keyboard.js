@@ -11,14 +11,15 @@ function midiToFreq(midi) {
 }
 
 export class Keyboard {
-    constructor(x, y, id = 'keyboard-main') { // Acepta un ID, con uno por defecto
+    constructor(x, y, id = 'keyboard-main') {
         this.id = id;
         this.x = x;
         this.y = y;
         this.width = 250;
-        this.height = 80;
+        this.height = 100;
         this.isPermanent = true;
         this.type = 'Keyboard';
+        this.octave = 4; // Octava inicial
 
         this.pitchCV = audioContext.createGain();
         this.pitchCV.gain.value = 0;
@@ -28,13 +29,10 @@ export class Keyboard {
         pitchSource.start();
         pitchSource.connect(this.pitchCV);
         
-        // --- Gate signal as a real AudioNode ---
         this.gateSignalNode = audioContext.createConstantSource();
         this.gateSignalNode.offset.value = 0;
         this.gateSignalNode.start();
 
-        this.gateOutput = { connectedModules: [] };
-        this.inputs = {}; 
         this.outputs = {
             'DISPARO': { x: this.width / 2 - 60, y: this.height, type: 'gate', source: this.gateSignalNode, orientation: 'vertical' },
             'TENSION': { x: this.width / 2 + 60, y: this.height, type: 'cv', source: this.pitchCV, orientation: 'vertical' }
@@ -42,18 +40,36 @@ export class Keyboard {
         
         this.activeKeys = new Set();
         this.lastNote = 60;
+
+        // --- Portamento ---
+        this.portamentoValue = 0.2;
+        this.portamentoSlider = { x: 60, y: 65, width: 130, height: 10 };
+        this.isDraggingPortamento = false;
+        this.recalculatePortamentoTime();
+
+        // --- Octave Buttons ---
+        this.octaveDownButton = { x: 10, y: 35, width: 20, height: 20 };
+        this.octaveUpButton = { x: this.width - 30, y: 35, width: 20, height: 20 };
+    }
+
+    recalculatePortamentoTime() {
+        this.portamentoTime = Math.pow(this.portamentoValue, 3) * 2.0;
     }
 
     handleKeyDown(key) {
         if (KEY_TO_MIDI[key] && !this.activeKeys.has(key)) {
             this.activeKeys.add(key);
-            this.lastNote = KEY_TO_MIDI[key];
+            const baseMidi = KEY_TO_MIDI[key];
+            this.lastNote = baseMidi + (this.octave - 4) * 12;
             const freq = midiToFreq(this.lastNote);
-            this.pitchCV.gain.setTargetAtTime(freq, audioContext.currentTime, 0.01);
-            
+            const now = audioContext.currentTime;
+
+            this.pitchCV.gain.cancelScheduledValues(now);
+            this.pitchCV.gain.setValueAtTime(this.pitchCV.gain.value, now);
+            this.pitchCV.gain.linearRampToValueAtTime(freq, now + this.portamentoTime);
+
             if (this.activeKeys.size === 1) {
-                this.gateSignalNode.offset.setTargetAtTime(1, audioContext.currentTime, 0.01);
-                // A lóxica de disparo agora manéxase en renderer.js a través das conexións
+                this.gateSignalNode.offset.setTargetAtTime(1, now, 0.01);
             }
         }
     }
@@ -63,7 +79,6 @@ export class Keyboard {
             this.activeKeys.delete(key);
             if (this.activeKeys.size === 0) {
                 this.gateSignalNode.offset.setTargetAtTime(0, audioContext.currentTime, 0.01);
-                // A lóxica de disparo agora manéxase en renderer.js a través das conexións
             }
         }
     }
@@ -79,13 +94,35 @@ export class Keyboard {
         ctx.strokeRect(0, 0, this.width, this.height);
 
         ctx.fillStyle = '#E0E0E0';
-        ctx.font = '14px Arial';
+        ctx.font = '12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('TECLADO', this.width / 2, 35);
+        ctx.fillText('TECLADO', this.width / 2, 20);
 
-        if (this.activeKeys.size > 0) {
-            ctx.fillText(`Nota: ${this.lastNote}`, this.width / 2, 55);
-        }
+        // Dibujar Slider de Portamento
+        ctx.font = '10px Arial';
+        ctx.fillText('PORTAMENTO', this.width / 2, this.portamentoSlider.y - 5);
+        
+        const slider = this.portamentoSlider;
+        ctx.fillStyle = '#111';
+        ctx.fillRect(slider.x, slider.y, slider.width, slider.height);
+        ctx.strokeStyle = '#555';
+        ctx.strokeRect(slider.x, slider.y, slider.width, slider.height);
+
+        const handleX = slider.x + this.portamentoValue * slider.width;
+        ctx.fillStyle = this.isDraggingPortamento ? '#aaffff' : '#E0E0E0';
+        ctx.fillRect(handleX - 2, slider.y - 2, 4, slider.height + 4);
+
+        // Dibujar botones de octava y valor
+        ctx.fillStyle = '#E0E0E0';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('-', this.octaveDownButton.x + 10, this.octaveDownButton.y + 15);
+        ctx.fillText('+', this.octaveUpButton.x + 10, this.octaveUpButton.y + 15);
+        ctx.strokeRect(this.octaveDownButton.x, this.octaveDownButton.y, this.octaveDownButton.width, this.octaveDownButton.height);
+        ctx.strokeRect(this.octaveUpButton.x, this.octaveUpButton.y, this.octaveUpButton.width, this.octaveUpButton.height);
+
+        ctx.font = '14px Arial';
+        ctx.fillText(`Oct: ${this.octave}`, this.width / 2, 45);
         
         ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
@@ -120,20 +157,76 @@ export class Keyboard {
         return null;
     }
 
-    // Añadir getState para guardar la posición y el ID
+    handleMouseDown(x, y) {
+        const slider = this.portamentoSlider;
+        const localX = x - this.x;
+        const localY = y - this.y;
+
+        if (localX >= slider.x && localX <= slider.x + slider.width &&
+            localY >= slider.y - 5 && localY <= slider.y + slider.height + 5) {
+            this.isDraggingPortamento = true;
+            this.updatePortamentoFromPosition(localX);
+            return true;
+        }
+
+        // Lógica para botones de octava
+        if (localX >= this.octaveDownButton.x && localX <= this.octaveDownButton.x + this.octaveDownButton.width &&
+            localY >= this.octaveDownButton.y && localY <= this.octaveDownButton.y + this.octaveDownButton.height) {
+            this.octave = Math.max(0, this.octave - 1);
+            return true;
+        }
+
+        if (localX >= this.octaveUpButton.x && localX <= this.octaveUpButton.x + this.octaveUpButton.width &&
+            localY >= this.octaveUpButton.y && localY <= this.octaveUpButton.y + this.octaveUpButton.height) {
+            this.octave = Math.min(8, this.octave + 1);
+            return true;
+        }
+
+        return false;
+    }
+
+    // eslint-disable-next-line no-unused-vars
+    handleMouseDrag(x, y) {
+        if (this.isDraggingPortamento) {
+            const localX = x - this.x;
+            this.updatePortamentoFromPosition(localX);
+            return true;
+        }
+        return false;
+    }
+
+    handleMouseUp() {
+        if (this.isDraggingPortamento) {
+            this.isDraggingPortamento = false;
+            return true;
+        }
+        return false;
+    }
+
+    updatePortamentoFromPosition(localX) {
+        const slider = this.portamentoSlider;
+        let value = (localX - slider.x) / slider.width;
+        this.portamentoValue = Math.max(0, Math.min(1, value)); // Clamp 0-1
+        this.recalculatePortamentoTime();
+    }
+
     getState() {
         return {
             id: this.id,
             type: this.type,
             x: this.x,
             y: this.y,
-            isPermanent: this.isPermanent
+            isPermanent: this.isPermanent,
+            portamentoValue: this.portamentoValue,
+            octave: this.octave
         };
     }
 
-    // setState para restaurar la posición (aunque es permanente, puede ser útil)
     setState(state) {
         this.x = state.x;
         this.y = state.y;
+        this.portamentoValue = state.portamentoValue !== undefined ? state.portamentoValue : 0.2;
+        this.octave = state.octave !== undefined ? state.octave : 4;
+        this.recalculatePortamentoTime();
     }
 }

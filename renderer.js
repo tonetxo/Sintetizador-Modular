@@ -433,6 +433,14 @@ function onMouseDown(e) {
       selectedModule = moduleHit;
       selectedConnection = null;
       
+      // --- INICIO DE LA MODIFICACIÓN ---
+      // Comprobar si se ha hecho clic en un control interactivo del módulo (como el slider del teclado)
+      if (moduleHit.handleMouseDown?.(worldPos.x, worldPos.y)) {
+        interactingModule = moduleHit;
+        return; // Evitar que el módulo se arrastre
+      }
+      // --- FIN DE LA MODIFICACIÓN ---
+      
       if (moduleHit.checkInteraction?.(worldPos)) {
         interactingModule = moduleHit;
         return;
@@ -473,10 +481,14 @@ function onMouseMove(e) {
   hoveredConnectorInfo = hit;
   canvas.style.cursor = hit ? 'pointer' : (isPanning ? 'grabbing' : 'grab');
 
-  if (draggingModule) {
+  // --- INICIO DE LA MODIFICACIÓN ---
+  if (interactingModule?.handleMouseDrag?.(worldPos.x, worldPos.y)) {
+    // El módulo está manejando el arrastre (p. ej., el slider)
+  } else if (draggingModule) {
     draggingModule.x = worldPos.x - dragOffset.x;
     draggingModule.y = worldPos.y - dragOffset.y;
   } 
+  // --- FIN DE LA MODIFICACIÓN ---
   else if (interactingModule?.handleDragInteraction) {
     interactingModule.handleDragInteraction(worldPos);
   } 
@@ -491,9 +503,13 @@ function onMouseUp(e) {
   canvas.classList.remove('grabbing');
   canvas.style.cursor = 'grab';
 
-  if (interactingModule?.endInteraction) {
+  // --- INICIO DE LA MODIFICACIÓN ---
+  if (interactingModule?.handleMouseUp?.()) {
+    // El módulo ha manejado el evento, así que lo liberamos
+  } else if (interactingModule?.endInteraction) {
     interactingModule.endInteraction();
   }
+  // --- FIN DE LA MODIFICACIÓN ---
 
   if (isPatching) {
     const worldPos = screenToWorld(mousePos.x, mousePos.y);
