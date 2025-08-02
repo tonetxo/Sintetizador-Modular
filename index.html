@@ -28,9 +28,23 @@
         <div class="context-menu-item" data-module="Reverb">Añadir Reverb</div>
         <div class="context-menu-item" data-module="Osciloscopio">Añadir Osciloscopio</div>
         <div class="context-menu-item" data-module="Math">Añadir Módulo de Mates</div>
+        <div class="context-menu-item" data-module="Microphone">Usar Micrófono</div>
+        <div class="context-menu-item" data-module="AudioPlayer">Reproducir Audio</div>
+        <div class="context-menu-item" data-module="Vocoder">Añadir Vocoder</div>
     </div>
 
     <div id="patch-context-menu" class="context-menu"></div>
+
+    <div id="audio-player-template" class="module-ui-overlay" style="display: none; position: absolute; padding: 5px; color: #E0E0E0; z-index: 10; width: 190px;">
+        <input type="file" class="audio-file-input" accept="audio/*" style="width: 100%; margin-bottom: 5px;">
+        <div style="display: flex; justify-content: space-around; align-items: center;">
+            <button class="play-stop-btn">Play</button>
+            <label class="loop-label" style="font-size: 12px;">
+                Loop:
+                <input type="checkbox" class="loop-checkbox" checked>
+            </label>
+        </div>
+    </div>
 
     <script src="renderer.js" type="module"></script>
 </body>

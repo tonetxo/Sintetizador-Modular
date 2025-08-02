@@ -14,6 +14,9 @@ import { Osciloscopio } from './modules/Osciloscopio.js';
 import { Delay } from './modules/Delay.js';
 import { Compressor } from './modules/Compressor.js';
 import { Reverb } from './modules/Reverb.js';
+import { Microphone } from './modules/Microphone.js';
+import { AudioPlayer } from './modules/AudioPlayer.js';
+import { Vocoder } from './modules/Vocoder.js';
 import { MathModule } from './modules/Math.js';
 
 const { dialog } = require('@electron/remote');
@@ -27,7 +30,8 @@ const patchContextMenu = document.getElementById('patch-context-menu');
 const MODULE_CLASSES = { 
   VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod, 
   SampleAndHold, Sequencer, Osciloscopio, Delay, 
-  Compressor, Reverb, Keyboard, Math: MathModule
+  Compressor, Reverb, Keyboard, Math: MathModule,
+  Microphone, AudioPlayer, Vocoder
 };
 
 let modules = [];
@@ -65,6 +69,7 @@ async function initAudioContext() {
     await audioContext.audioWorklet.addModule('./worklets/sequencer-processor.js');
     await audioContext.audioWorklet.addModule('./worklets/adsr-processor.js');
     await audioContext.audioWorklet.addModule('./worklets/math-processor.js');
+    await audioContext.audioWorklet.addModule('./worklets/vocoder-processor.js');
     
     audioContextReady = true;
     console.log('AudioContext initialized successfully');
@@ -139,6 +144,13 @@ function draw() {
   // Draw modules
   modules.forEach(module => {
     module.draw(ctx, module === selectedModule, hoveredConnectorInfo);
+    if (module.ui) {
+      const screenX = module.x * view.zoom + view.x;
+      const screenY = (module.y + 30) * view.zoom + view.y; // Add offset for title
+      module.ui.style.left = `${screenX}px`;
+      module.ui.style.top = `${screenY}px`;
+      module.ui.style.display = 'block';
+    }
   });
 
   ctx.restore();
@@ -202,6 +214,9 @@ function deleteSelection() {
     });
     
     selectedModule.disconnect?.();
+    if (selectedModule.ui) {
+      selectedModule.ui.remove();
+    }
     modules = modules.filter(m => m !== selectedModule);
     selectedModule = null;
   }
@@ -344,6 +359,43 @@ async function addModule(type, x, y) {
   if (newModule.readyPromise) await newModule.readyPromise;
   modules.push(newModule);
   selectedModule = newModule;
+
+  if (type === 'AudioPlayer') {
+    createAudioPlayerUI(newModule);
+  }
+}
+
+function createAudioPlayerUI(module) {
+  const template = document.getElementById('audio-player-template');
+  const ui = template.cloneNode(true);
+  ui.id = `audioplayer-ui-${module.id}`;
+  document.body.appendChild(ui);
+  module.ui = ui; // Store reference to the UI element
+
+  const fileInput = ui.querySelector('.audio-file-input');
+  fileInput.addEventListener('change', (e) => module.loadFile(e.target.files[0]));
+
+  const playStopBtn = ui.querySelector('.play-stop-btn');
+  playStopBtn.addEventListener('click', () => {
+    if (module.isPlaying) {
+      module.stop();
+      playStopBtn.textContent = 'Play';
+    } else {
+      module.play();
+      playStopBtn.textContent = 'Stop';
+    }
+  });
+
+  const loopCheckbox = ui.querySelector('.loop-checkbox');
+  loopCheckbox.addEventListener('change', (e) => {
+    module.loop = e.target.checked;
+    if (module.source) {
+        module.source.loop = module.loop;
+    }
+  });
+
+  // Prevent module dragging when interacting with the UI
+  ui.addEventListener('mousedown', (e) => e.stopPropagation());
 }
 
 // Event handlers

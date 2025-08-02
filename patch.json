@@ -20,7 +20,7 @@
       "x": -148.2000000000001,
       "y": -13.40000000000002,
       "waveform": "square",
-      "detuneValue": 0
+      "detuneValue": 3
     },
     {
       "id": "vca-1753909974342",
@@ -31,28 +31,28 @@
     {
       "id": "sequencer-1753980160303",
       "type": "Sequencer",
-      "x": -735.2226499680219,
-      "y": 223.1698654463492,
+      "x": -736.2226499680219,
+      "y": 247.1698654463492,
       "tempo": 100.51136363636371,
-      "direction": 1,
+      "direction": 2,
       "numberOfSteps": 16,
       "running": false,
       "sequence": [
+        0.3323116590396825,
+        0.36981165903968255,
+        0.20106165903968254,
+        0.3135616590396825,
+        0.3010616590396825,
         0.5,
-        0.6580014250144373,
+        0.27606165903968255,
         0.5,
-        0.5,
-        0.914623318079365,
-        0.5,
-        0.7364105159235272,
-        0.5,
-        0.5,
-        0.5,
-        0.8014473182125819,
-        0.8646233180793651,
-        0.5,
-        0.5,
-        0.8271233180793651,
+        0.36981165903968255,
+        0.3948116590396825,
+        0.36981165903968255,
+        0.23856165903968254,
+        0.3010616590396825,
+        0.2510616590396825,
+        0.27606165903968255,
         0.5
       ],
       "gateLengths": [
@@ -62,11 +62,11 @@
         0.44460555972952376,
         0.5,
         0.9066055597295238,
-        1,
+        0.5738027798647619,
         0.5,
         0.5,
         0.5,
-        1,
+        0.3593027798647619,
         0.5,
         0.5,
         0.5,
@@ -77,13 +77,13 @@
         0,
         0,
         0,
-        0,
+        1,
         0,
         0,
         0,
         1,
         1,
-        0,
+        1,
         0,
         1,
         0,
@@ -158,8 +158,8 @@
       "type": "VCF",
       "x": 306,
       "y": -42,
-      "cutoff": 238.9476318359375,
-      "resonance": 13.772727012634277,
+      "cutoff": 1000,
+      "resonance": 1,
       "filterType": "lowpass"
     },
     {
@@ -171,11 +171,11 @@
     {
       "id": "lfo-1754142745355",
       "type": "LFO",
-      "x": -128.49999999999994,
-      "y": 259,
-      "rate": 440,
-      "depth": 3,
-      "waveform": "sawtooth"
+      "x": -127.49999999999994,
+      "y": 331,
+      "rate": 8.505749702453613,
+      "depth": 1000,
+      "waveform": "sine"
     },
     {
       "id": "math-1754143849320",
@@ -189,8 +189,8 @@
       "type": "VCO",
       "x": -142,
       "y": -300,
-      "waveform": "sawtooth",
-      "detuneValue": 0
+      "waveform": "square",
+      "detuneValue": 19.3
     },
     {
       "id": "mixer-1754143906768",
@@ -203,6 +203,25 @@
         0,
         0
       ]
+    },
+    {
+      "id": "math-1754147906451",
+      "type": "Math",
+      "x": 100.49586776859529,
+      "y": 491.8264462809915,
+      "operation": 0
+    },
+    {
+      "id": "microphone-1754148847135",
+      "type": "Microphone",
+      "x": -654,
+      "y": -435
+    },
+    {
+      "id": "osc-1754148852566",
+      "type": "Osciloscopio",
+      "x": -394,
+      "y": -423
     }
   ],
   "connections": [
@@ -223,12 +242,6 @@
       "fromConnector": "TENSION",
       "toId": "vco-1753909969657",
       "toConnector": "1V/Oct"
-    },
-    {
-      "fromId": "sequencer-1753980160303",
-      "fromConnector": "DISPARO",
-      "toId": "adsr-1754099841905",
-      "toConnector": "Gate"
     },
     {
       "fromId": "adsr-1754099841905",
@@ -307,6 +320,42 @@
       "fromConnector": "Out",
       "toId": "vcf-1754141914697",
       "toConnector": "audio"
+    },
+    {
+      "fromId": "lfo-1754142745355",
+      "fromConnector": "SALIDA",
+      "toId": "vco-1753909969657",
+      "toConnector": "DETUNE_CV"
+    },
+    {
+      "fromId": "sequencer-1753980160303",
+      "fromConnector": "DISPARO",
+      "toId": "lfo-1754142745355",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "math-1754147906451",
+      "toConnector": "A"
+    },
+    {
+      "fromId": "sequencer-1753980160303",
+      "fromConnector": "DISPARO",
+      "toId": "math-1754147906451",
+      "toConnector": "B"
+    },
+    {
+      "fromId": "math-1754147906451",
+      "fromConnector": "Out",
+      "toId": "adsr-1754099841905",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "microphone-1754148847135",
+      "fromConnector": "audio",
+      "toId": "osc-1754148852566",
+      "toConnector": "input"
     }
   ]
 }
