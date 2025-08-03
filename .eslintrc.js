@@ -14,4 +14,15 @@ module.exports = {
     'no-unused-vars': 'warn',
     'no-console': 'off', // Permitir console.log para depuración
   },
+  overrides: [
+    {
+      files: ['worklets/*.js'],
+      globals: {
+        sampleRate: 'readonly',
+      },
+      rules: {
+        'no-redeclare': 'off', // sampleRate is a global in AudioWorkletGlobalScope
+      },
+    },
+  ],
 };

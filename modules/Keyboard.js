@@ -6,10 +6,6 @@ const KEY_TO_MIDI = {
     't': 66, 'g': 67, 'y': 68, 'h': 69, 'u': 70, 'j': 71, 'k': 72
 };
 
-function midiToFreq(midi) {
-    return 440 * Math.pow(2, (midi - 69) / 12);
-}
-
 export class Keyboard {
     constructor(x, y, id = 'keyboard-main') {
         this.id = id;
@@ -21,13 +17,9 @@ export class Keyboard {
         this.type = 'Keyboard';
         this.octave = 4; // Octava inicial
 
-        this.pitchCV = audioContext.createGain();
-        this.pitchCV.gain.value = 0;
-        
-        const pitchSource = audioContext.createConstantSource();
-        pitchSource.offset.value = 1;
-        pitchSource.start();
-        pitchSource.connect(this.pitchCV);
+        this.pitchCV = audioContext.createConstantSource();
+        this.pitchCV.offset.value = 0; // Valor inicial de 0V
+        this.pitchCV.start();
         
         this.gateSignalNode = audioContext.createConstantSource();
         this.gateSignalNode.offset.value = 0;
@@ -61,15 +53,19 @@ export class Keyboard {
             this.activeKeys.add(key);
             const baseMidi = KEY_TO_MIDI[key];
             this.lastNote = baseMidi + (this.octave - 4) * 12;
-            const freq = midiToFreq(this.lastNote);
+            
+            // Calcular el valor de CV para 1V/Oct
+            // Asumimos que MIDI 60 (C5) es 0V
+            const cvValue = (this.lastNote - 60) / 12;
+            
             const now = audioContext.currentTime;
 
-            this.pitchCV.gain.cancelScheduledValues(now);
-            this.pitchCV.gain.setValueAtTime(this.pitchCV.gain.value, now);
-            this.pitchCV.gain.linearRampToValueAtTime(freq, now + this.portamentoTime);
+            this.pitchCV.offset.cancelScheduledValues(now);
+            this.pitchCV.offset.setValueAtTime(this.pitchCV.offset.value, now);
+            this.pitchCV.offset.linearRampToValueAtTime(cvValue, now + this.portamentoTime);
 
             if (this.activeKeys.size === 1) {
-                this.gateSignalNode.offset.setTargetAtTime(1, now, 0.01);
+                this.gateSignalNode.offset.setValueAtTime(1, now);
             }
         }
     }
@@ -78,7 +74,7 @@ export class Keyboard {
         if (this.activeKeys.has(key)) {
             this.activeKeys.delete(key);
             if (this.activeKeys.size === 0) {
-                this.gateSignalNode.offset.setTargetAtTime(0, audioContext.currentTime, 0.01);
+                this.gateSignalNode.offset.setValueAtTime(0, audioContext.currentTime);
             }
         }
     }

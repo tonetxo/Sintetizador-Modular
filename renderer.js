@@ -1,5 +1,7 @@
 // renderer.js
-import { audioContext } from './modules/AudioContext.js';
+console.log('[DEBUG] renderer.js script started');
+
+import { audioContext, onAudioReady } from './modules/AudioContext.js';
 import { VCO } from './modules/VCO.js';
 import { VCF } from './modules/VCF.js';
 import { ADSR } from './modules/ADSR.js';
@@ -19,17 +21,18 @@ import { AudioPlayer } from './modules/AudioPlayer.js';
 import { Vocoder } from './modules/Vocoder.js';
 import { MathModule } from './modules/Math.js';
 
-const { dialog } = require('@electron/remote');
-const fs = require('fs');
-
+// DOM Elements
 const canvas = document.getElementById('synth-canvas');
 const ctx = canvas.getContext('2d');
 const contextMenu = document.getElementById('context-menu');
 const patchContextMenu = document.getElementById('patch-context-menu');
+const audioStatus = document.getElementById('audio-status');
+const errorMessage = document.getElementById('error-message');
 
-const MODULE_CLASSES = { 
-  VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod, 
-  SampleAndHold, Sequencer, Osciloscopio, Delay, 
+// Application State
+const MODULE_CLASSES = {
+  VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod,
+  SampleAndHold, Sequencer, Osciloscopio, Delay,
   Compressor, Reverb, Keyboard, Math: MathModule,
   Microphone, AudioPlayer, Vocoder
 };
@@ -47,67 +50,111 @@ let isPanning = false;
 let lastMousePos = { x: 0, y: 0 };
 let mousePos = { x: 0, y: 0 };
 let hoveredConnectorInfo = null;
-let audioContextReady = false;
 
+// View settings
 const view = { x: 0, y: 0, zoom: 1, minZoom: 0.2, maxZoom: 2.0 };
 const CABLE_COLORS = { audio: '#f0a048', cv: '#ff80ab', gate: '#ff80ab' };
 
-// Helper functions
+// Helper Functions
 function screenToWorld(x, y) {
   return { x: (x - view.x) / view.zoom, y: (y - view.y) / view.zoom };
 }
 
-async function initAudioContext() {
-  try {
-    // Resume AudioContext if suspended
-    if (audioContext.state === 'suspended') {
-      await audioContext.resume();
-    }
-    
-    // Load AudioWorklets
-    await audioContext.audioWorklet.addModule('./worklets/ring-mod-processor.js');
-    await audioContext.audioWorklet.addModule('./worklets/sequencer-processor.js');
-    await audioContext.audioWorklet.addModule('./worklets/adsr-processor.js');
-    await audioContext.audioWorklet.addModule('./worklets/math-processor.js');
-    await audioContext.audioWorklet.addModule('./worklets/vocoder-processor.js');
-    
-    audioContextReady = true;
-    console.log('AudioContext initialized successfully');
-  } catch (error) {
-    console.error('Error initializing AudioContext:', error);
-    throw error;
-  }
+function showError(message, duration = 5000) {
+  errorMessage.textContent = message;
+  errorMessage.style.display = 'block';
+  setTimeout(() => errorMessage.style.display = 'none', duration);
 }
 
+async function loadWorklet(workletName, workletPath, maxRetries = 3) {
+  let retries = 0;
+  let lastError = null;
+
+  while (retries < maxRetries) {
+    try {
+      console.log(`Loading ${workletName} worklet (attempt ${retries + 1})...`);
+      await audioContext.audioWorklet.addModule(workletPath);
+      console.log(`${workletName} worklet loaded successfully`);
+      return true;
+    } catch (error) {
+      lastError = error;
+      retries++;
+      if (retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 500 * retries));
+      }
+    }
+  }
+
+  console.error(`Failed to load ${workletName} worklet after ${maxRetries} attempts:`, lastError);
+  showError(`Error loading ${workletName} module. Some features may not work.`);
+  return false;
+}
+
+async function initAudioContext() {
+  return new Promise((resolve) => {
+    onAudioReady(() => {
+      console.log('AudioContext ready for use');
+      audioStatus.textContent = "Audio listo";
+      resolve();
+    });
+  });
+}
+
+// Drawing Functions
 function draw() {
-  // Clear canvas
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.restore();
 
-  // Apply view transformations
   ctx.save();
   ctx.translate(view.x, view.y);
   ctx.scale(view.zoom, view.zoom);
 
-  // Draw background
+  drawGrid();
+  drawConnections();
+  if (isPatching) {
+    drawActivePatch();
+  }
+  drawModules();
+
+  ctx.restore();
+  requestAnimationFrame(draw);
+}
+
+function drawGrid() {
+  const gridSize = 20 * view.zoom;
+  const offsetX = view.x % gridSize;
+  const offsetY = view.y % gridSize;
+
   ctx.fillStyle = '#3c3c3c';
-  ctx.fillRect(-view.x / view.zoom, -view.y / view.zoom, 
+  ctx.fillRect(-view.x / view.zoom, -view.y / view.zoom,
                canvas.width / view.zoom, canvas.height / view.zoom);
 
-  // Draw connections
+  ctx.strokeStyle = '#2a2a2a';
+  ctx.lineWidth = 0.5;
+
+  for (let x = -offsetX; x < canvas.width; x += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(x / view.zoom, -view.y / view.zoom);
+    ctx.lineTo(x / view.zoom, (canvas.height - view.y) / view.zoom);
+    ctx.stroke();
+  }
+
+  for (let y = -offsetY; y < canvas.height; y += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(-view.x / view.zoom, y / view.zoom);
+    ctx.lineTo((canvas.width - view.x) / view.zoom, y / view.zoom);
+    ctx.stroke();
+  }
+}
+
+function drawConnections() {
   ctx.lineWidth = 3.5;
   connections.forEach(conn => {
-    const fromPos = { 
-      x: conn.fromModule.x + conn.fromConnector.props.x, 
-      y: conn.fromModule.y + conn.fromConnector.props.y 
-    };
-    const toPos = { 
-      x: conn.toModule.x + conn.toConnector.props.x, 
-      y: conn.toModule.y + conn.toConnector.props.y 
-    };
-    
+    const fromPos = getConnectorPosition(conn.fromModule, conn.fromConnector.props);
+    const toPos = getConnectorPosition(conn.toModule, conn.toConnector.props);
+
     const dist = Math.sqrt(Math.pow(toPos.x - fromPos.x, 2) + Math.pow(toPos.y - fromPos.y, 2));
     const droop = Math.min(100, dist * 0.4);
 
@@ -122,78 +169,113 @@ function draw() {
     ctx.strokeStyle = (conn === selectedConnection) ? 'white' : (CABLE_COLORS[conn.type] || '#888');
     ctx.stroke();
   });
-
-  // Draw active patch connection
-  if (isPatching) {
-    ctx.strokeStyle = CABLE_COLORS[patchStart.connector.props.type] || '#888';
-    const fromPos = patchStart;
-    const worldMouse = screenToWorld(mousePos.x, mousePos.y);
-    
-    const dist = Math.sqrt(Math.pow(worldMouse.x - fromPos.x, 2) + Math.pow(worldMouse.y - fromPos.y, 2));
-    const droop = Math.min(100, dist * 0.4);
-
-    const cp1x = fromPos.x + (fromPos.connector.props.orientation === 'horizontal' ? droop : 0);
-    const cp1y = fromPos.y + (fromPos.connector.props.orientation === 'vertical' ? droop : 0);
-    
-    ctx.beginPath();
-    ctx.moveTo(fromPos.x, fromPos.y);
-    ctx.bezierCurveTo(cp1x, cp1y, worldMouse.x, worldMouse.y - droop, worldMouse.x, worldMouse.y);
-    ctx.stroke();
-  }
-
-  // Draw modules
-  modules.forEach(module => {
-    module.draw(ctx, module === selectedModule, hoveredConnectorInfo);
-    if (module.ui) {
-      const screenX = module.x * view.zoom + view.x;
-      const screenY = (module.y + 30) * view.zoom + view.y; // Add offset for title
-      module.ui.style.left = `${screenX}px`;
-      module.ui.style.top = `${screenY}px`;
-      module.ui.style.display = 'block';
-    }
-  });
-
-  ctx.restore();
-  requestAnimationFrame(draw);
 }
 
-function connectNodes(sourceConnector, destConnector) {
-  const sourceNode = sourceConnector.source;
-  const destNode = destConnector.target;
-  if (!sourceNode || !destNode) {
-    console.error("Source or target node is not ready or does not exist.", { sourceConnector, destConnector });
-    return;
+function drawActivePatch() {
+  ctx.strokeStyle = CABLE_COLORS[patchStart.connector.props.type] || '#888';
+  const fromPos = getConnectorPosition(patchStart.module, patchStart.connector.props);
+  const worldMouse = screenToWorld(mousePos.x, mousePos.y);
+
+  const dist = Math.sqrt(Math.pow(worldMouse.x - fromPos.x, 2) + Math.pow(worldMouse.y - fromPos.y, 2));
+  const droop = Math.min(100, dist * 0.4);
+
+  const cp1x = fromPos.x + (patchStart.connector.props.orientation === 'horizontal' ? droop : 0);
+  const cp1y = fromPos.y + (patchStart.connector.props.orientation === 'vertical' ? droop : 0);
+
+  ctx.beginPath();
+  ctx.moveTo(fromPos.x, fromPos.y);
+  ctx.bezierCurveTo(cp1x, cp1y, worldMouse.x, worldMouse.y - droop, worldMouse.x, worldMouse.y);
+  ctx.stroke();
+}
+
+function drawModules() {
+  modules.forEach(module => {
+    module.draw(ctx, module === selectedModule, hoveredConnectorInfo);
+    updateModuleUI(module);
+  });
+}
+
+function updateModuleUI(module) {
+  if (module.ui) {
+    const screenX = module.x * view.zoom + view.x;
+    const screenY = (module.y + 30) * view.zoom + view.y;
+    module.ui.style.left = `${screenX}px`;
+    module.ui.style.top = `${screenY}px`;
+    module.ui.style.display = 'block';
   }
+}
 
-  const outputIndex = sourceConnector.port || 0;
-  const inputIndex = destConnector.inputIndex || 0;
+function getConnectorPosition(module, connector) {
+  return {
+    x: module.x + connector.x,
+    y: module.y + connector.y
+  };
+}
 
-  if (destNode instanceof AudioParam) {
-    sourceNode.connect(destNode, outputIndex);
-  } else {
-    sourceNode.connect(destNode, outputIndex, inputIndex);
+// Audio Connection Functions
+function connectNodes(sourceConnector, destConnector) {
+  try {
+    const sourceNode = sourceConnector.source;
+    const destTargets = Array.isArray(destConnector.target) ? destConnector.target : [destConnector.target];
+
+    if (!sourceNode || !destTargets || destTargets.length === 0) {
+      console.error("Invalid connection attempt:", { sourceConnector, destConnector });
+      return false;
+    }
+
+    const outputIndex = sourceConnector.port || 0;
+
+    destTargets.forEach(destNode => {
+      if (!destNode) return;
+      const inputIndex = destConnector.inputIndex || 0;
+
+      try {
+        if (destNode instanceof AudioParam) {
+          sourceNode.connect(destNode, outputIndex);
+        } else {
+          sourceNode.connect(destNode, outputIndex, inputIndex);
+        }
+      } catch (connectError) {
+        console.error("Connection error:", connectError);
+      }
+    });
+
+    return true;
+  } catch (error) {
+    console.error("Error in connectNodes:", error);
+    return false;
   }
 }
 
 function disconnectNodes(sourceConnector, destConnector) {
-  const sourceNode = sourceConnector.source;
-  const destNode = destConnector.target;
-  if (!sourceNode || !destNode) return;
-
-  const outputIndex = sourceConnector.port || 0;
-  const inputIndex = destConnector.inputIndex || 0;
-
   try {
-    if (destNode instanceof AudioParam) {
-      sourceNode.disconnect(destNode, outputIndex);
-    } else {
-      sourceNode.disconnect(destNode, outputIndex, inputIndex);
-    }
-  } catch(e) { 
-    console.warn("Error disconnecting node:", e); 
+    const sourceNode = sourceConnector.source;
+    const destTargets = Array.isArray(destConnector.target) ? destConnector.target : [destConnector.target];
+
+    if (!sourceNode || !destTargets || destTargets.length === 0) return;
+
+    const outputIndex = sourceConnector.port || 0;
+
+    destTargets.forEach(destNode => {
+      if (!destNode) return;
+      const inputIndex = destConnector.inputIndex || 0;
+
+      try {
+        if (destNode instanceof AudioParam) {
+          sourceNode.disconnect(destNode, outputIndex);
+        } else {
+          sourceNode.disconnect(destNode, outputIndex, inputIndex);
+        }
+      } catch (disconnectError) {
+        console.warn("Disconnection error:", disconnectError);
+      }
+    });
+  } catch (error) {
+    console.error("Error in disconnectNodes:", error);
   }
 }
 
+// Patch Management Functions
 function deleteSelection() {
   if (selectedConnection) {
     const conn = selectedConnection;
@@ -212,8 +294,13 @@ function deleteSelection() {
       }
       return !shouldRemove;
     });
-    
-    selectedModule.disconnect?.();
+
+    try {
+      selectedModule.disconnect?.();
+    } catch (disconnectError) {
+      console.error("Error disconnecting module:", disconnectError);
+    }
+
     if (selectedModule.ui) {
       selectedModule.ui.remove();
     }
@@ -223,377 +310,581 @@ function deleteSelection() {
 }
 
 async function savePatch() {
-  const patch = {
-    modules: modules.map(m => m.getState ? m.getState() : {}),
-    connections: connections.map(c => ({
-      fromId: c.fromModule.id,
-      fromConnector: c.fromConnector.name,
-      toId: c.toModule.id,
-      toConnector: c.toConnector.name,
-    })).filter(c => c.fromId && c.toId)
-  };
-
-  const result = await dialog.showSaveDialog({
-    title: 'Guardar Patch', 
-    defaultPath: 'patch.json',
-    filters: [{ name: 'JSON Files', extensions: ['json'] }]
-  });
-
-  if (!result.canceled && result.filePath) {
-    fs.writeFileSync(result.filePath, JSON.stringify(patch, null, 2));
+  try {
+    const patch = {
+      modules: modules.map(m => m.getState ? m.getState() : {}),
+      connections: connections.map(c => ({
+        fromId: c.fromModule.id,
+        fromConnector: c.fromConnector.name,
+        toId: c.toModule.id,
+        toConnector: c.toConnector.name,
+      })).filter(c => c.fromId && c.toId)
+    };
+    const result = await window.electronAPI.savePatch(patch);
+    if (result.success) {
+      console.log('Patch guardado en:', result.path);
+    } else if (result.error) {
+      showError(`Error al guardar: ${result.error}`);
+    }
+  } catch (error) {
+    console.error("Error saving patch:", error);
+    showError("Error al guardar el patch");
   }
 }
 
 async function loadPatch() {
-  const result = await dialog.showOpenDialog({
-    title: 'Cargar Patch', 
-    properties: ['openFile'],
-    filters: [{ name: 'JSON Files', extensions: ['json'] }]
-  });
-
-  if (!result.canceled && result.filePaths.length > 0) {
-    const patchData = JSON.parse(fs.readFileSync(result.filePaths[0], 'utf-8'));
-    await reconstructPatch(patchData);
+  try {
+    const result = await window.electronAPI.loadPatch();
+    if (result.success) {
+      await reconstructPatch(result.data);
+    } else if (result.error) {
+      showError(`Error al cargar: ${result.error}`);
+    }
+  } catch (error) {
+    console.error("Error loading patch:", error);
+    showError("Error al cargar el patch");
   }
 }
 
-async function reconstructPatch(patchData) {
-  modules.filter(m => !m.isPermanent).forEach(m => m.disconnect && m.disconnect());
-  modules = modules.filter(m => m.isPermanent);
-  connections = [];
-  selectedModule = null;
-  selectedConnection = null;
-
-  const modulePromises = patchData.modules.map(async (moduleState) => {
-    if (moduleState.isPermanent) {
-        const existingModule = modules.find(m => m.id === moduleState.id);
-        existingModule?.setState?.(moduleState);
-        return null;
+async function loadPatchFromFile(filePath) {
+    try {
+        const result = await window.electronAPI.loadPatchFromFile(filePath);
+        if (result.success) {
+            await reconstructPatch(result.data);
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        console.error(`Error loading patch from ${filePath}:`, error);
+        showError(`No se pudo cargar el patch: ${filePath}`);
     }
-    
-    const ModuleClass = MODULE_CLASSES[moduleState.type];
-    if (!ModuleClass) return null;
-
-    const newModule = new ModuleClass(moduleState.x, moduleState.y, moduleState.id, moduleState);
-    if (newModule.readyPromise) await newModule.readyPromise;
-    return newModule;
-  });
-
-  const loadedModules = (await Promise.all(modulePromises)).filter(m => m);
-  modules.push(...loadedModules);
-
-  const moduleMap = new Map(modules.map(m => [m.id, m]));
-  
-  patchData.connections.forEach(connData => {
-    const fromModule = moduleMap.get(connData.fromId);
-    const toModule = moduleMap.get(connData.toId);
-    if (!fromModule || !toModule) return;
-    
-    const fromConnector = fromModule.outputs?.[connData.fromConnector];
-    const toConnector = toModule.inputs?.[connData.toConnector];
-    if (!fromConnector || !toConnector) return;
-
-    if (fromConnector.source && toConnector.target) {
-      connectNodes(fromConnector, toConnector);
-    }
-
-    connections.push({
-      fromModule, 
-      toModule,
-      fromConnector: { name: connData.fromConnector, props: fromConnector },
-      toConnector: { name: connData.toConnector, props: toConnector },
-      type: fromConnector.type
-    });
-  });
 }
 
-// Interaction functions
+async function reconstructPatch(patchData) {
+  try {
+    // Clear existing modules
+    modules.filter(m => !m.isPermanent).forEach(m => {
+      try {
+        m.disconnect?.();
+        if (m.ui) m.ui.remove();
+      } catch (error) {
+        console.error(`Error disconnecting module ${m.id}:`, error);
+      }
+    });
+
+    modules = modules.filter(m => m.isPermanent);
+    connections = [];
+    selectedModule = null;
+    selectedConnection = null;
+
+    // Load new modules
+    const modulePromises = patchData.modules.map(async (moduleState) => {
+      if (moduleState.isPermanent) {
+          const existingModule = modules.find(m => m.id === moduleState.id);
+          if (existingModule) {
+            try {
+              existingModule.setState?.(moduleState);
+            } catch (error) {
+              console.error(`Error setting state for module ${moduleState.id}:`, error);
+            }
+          }
+          return null;
+      }
+
+      const ModuleClass = MODULE_CLASSES[moduleState.type];
+      if (!ModuleClass) {
+        console.warn(`Module type ${moduleState.type} not found`);
+        return null;
+      }
+
+      try {
+        const newModule = new ModuleClass(moduleState.x, moduleState.y, moduleState.id, moduleState);
+        if (newModule.readyPromise) {
+          await newModule.readyPromise.catch(error => {
+            console.error(`Error initializing module ${moduleState.id}:`, error);
+          });
+        }
+        return newModule;
+      } catch (error) {
+        console.error(`Error creating module ${moduleState.type}:`, error);
+        return null;
+      }
+    });
+
+    const loadedModules = (await Promise.all(modulePromises)).filter(m => m);
+    modules.push(...loadedModules);
+
+    // Create connections
+    const moduleMap = new Map(modules.map(m => [m.id, m]));
+
+    patchData.connections.forEach(connData => {
+      try {
+        const fromModule = moduleMap.get(connData.fromId);
+        const toModule = moduleMap.get(connData.toId);
+        if (!fromModule || !toModule) {
+          console.warn(`Connection references missing modules: ${connData.fromId} -> ${connData.toId}`);
+          return;
+        }
+
+        const fromConnector = fromModule.outputs?.[connData.fromConnector];
+        const toConnector = toModule.inputs?.[connData.toConnector];
+        if (!fromConnector || !toConnector) {
+          console.warn(`Connection references missing connectors: ${connData.fromConnector} -> ${connData.toConnector}`);
+          return;
+        }
+
+        if (fromConnector.source && toConnector.target) {
+          const success = connectNodes(fromConnector, toConnector);
+          if (!success) {
+            console.warn(`Failed to connect nodes: ${connData.fromId}.${connData.fromConnector} -> ${connData.toId}.${connData.toConnector}`);
+            return;
+          }
+        }
+
+        connections.push({
+          fromModule,
+          toModule,
+          fromConnector: { name: connData.fromConnector, props: fromConnector },
+          toConnector: { name: connData.toConnector, props: toConnector },
+          type: fromConnector.type
+        });
+      } catch (error) {
+        console.error(`Error processing connection ${connData.fromId}.${connData.fromConnector} -> ${connData.toId}.${connData.toConnector}:`, error);
+      }
+    });
+  } catch (error) {
+    console.error("Error reconstructing patch:", error);
+    throw error;
+  }
+}
+
+// Interaction Functions
 function getModuleAt(x, y) {
-  return [...modules].reverse().find(m => 
-    x >= m.x && x <= m.x + m.width && 
+  return [...modules].reverse().find(m =>
+    x >= m.x && x <= m.x + m.width &&
     y >= m.y && y <= m.y + m.height
   );
 }
 
 function getModuleAndConnectorAt(x, y) {
   for (const module of [...modules].reverse()) {
-    const connector = module.getConnectorAt?.(x, y);
-    if (connector) return { module, connector };
+    try {
+      const connector = module.getConnectorAt?.(x, y);
+      if (connector) return { module, connector };
+    } catch (error) {
+      console.error(`Error getting connector for module ${module.id}:`, error);
+    }
   }
   return null;
 }
 
 function getConnectionAt(x, y) {
   const threshold = 10 / view.zoom;
-  
+
   for (const conn of connections) {
-    const fromPos = { 
-      x: conn.fromModule.x + conn.fromConnector.props.x, 
-      y: conn.fromModule.y + conn.fromConnector.props.y 
-    };
-    const toPos = { 
-      x: conn.toModule.x + conn.toConnector.props.x, 
-      y: conn.toModule.y + conn.toConnector.props.y 
-    };
-    
-    const dist = Math.sqrt(Math.pow(toPos.x - fromPos.x, 2) + Math.pow(toPos.y - fromPos.y, 2));
-    const droop = Math.min(100, dist * 0.4);
+    try {
+      const fromPos = getConnectorPosition(conn.fromModule, conn.fromConnector.props);
+      const toPos = getConnectorPosition(conn.toModule, conn.toConnector.props);
 
-    const cp1 = { x: fromPos.x + (conn.fromConnector.props.orientation === 'horizontal' ? droop : 0), y: fromPos.y + (conn.fromConnector.props.orientation === 'vertical' ? droop : 0) };
-    const cp2 = { x: toPos.x - (conn.toConnector.props.orientation === 'horizontal' ? droop : 0), y: toPos.y + (conn.toConnector.props.orientation === 'vertical' ? droop : 0) };
+      const dist = Math.sqrt(Math.pow(toPos.x - fromPos.x, 2) + Math.pow(toPos.y - fromPos.y, 2));
+      const droop = Math.min(100, dist * 0.4);
 
-    for (let t = 0.05; t <= 0.95; t += 0.05) {
-      const tx = Math.pow(1-t, 3)*fromPos.x + 3*Math.pow(1-t,2)*t*cp1.x + 3*(1-t)*Math.pow(t,2)*cp2.x + Math.pow(t,3)*toPos.x;
-      const ty = Math.pow(1-t, 3)*fromPos.y + 3*Math.pow(1-t,2)*t*cp1.y + 3*(1-t)*Math.pow(t,2)*cp2.y + Math.pow(t,3)*toPos.y;
-      if (Math.sqrt(Math.pow(x - tx, 2) + Math.pow(y - ty, 2)) < threshold) return conn;
+      const cp1 = {
+        x: fromPos.x + (conn.fromConnector.props.orientation === 'horizontal' ? droop : 0),
+        y: fromPos.y + (conn.fromConnector.props.orientation === 'vertical' ? droop : 0)
+      };
+      const cp2 = {
+        x: toPos.x - (conn.toConnector.props.orientation === 'horizontal' ? droop : 0),
+        y: toPos.y + (conn.toConnector.props.orientation === 'vertical' ? droop : 0)
+      };
+
+      for (let t = 0.05; t <= 0.95; t += 0.05) {
+        const tx = Math.pow(1-t, 3)*fromPos.x + 3*Math.pow(1-t,2)*t*cp1.x + 3*(1-t)*Math.pow(t,2)*cp2.x + Math.pow(t,3)*toPos.x;
+        const ty = Math.pow(1-t, 3)*fromPos.y + 3*Math.pow(1-t,2)*t*cp1.y + 3*(1-t)*Math.pow(t,2)*cp2.y + Math.pow(t,3)*toPos.y;
+        if (Math.sqrt(Math.pow(x - tx, 2) + Math.pow(y - ty, 2)) < threshold) return conn;
+      }
+    } catch (error) {
+      console.error("Error checking connection hit:", error);
     }
   }
   return null;
 }
 
 async function addModule(type, x, y) {
-  const ModuleClass = MODULE_CLASSES[type];
-  if (!ModuleClass) return;
+  try {
+    const ModuleClass = MODULE_CLASSES[type];
+    if (!ModuleClass) {
+      console.warn(`Module type ${type} not found`);
+      return;
+    }
 
-  const newModule = new ModuleClass(x, y);
-  if (newModule.readyPromise) await newModule.readyPromise;
-  modules.push(newModule);
-  selectedModule = newModule;
+    const newModule = new ModuleClass(x, y);
+    if (newModule.readyPromise) {
+      await newModule.readyPromise.catch(error => {
+        console.error(`Error initializing module ${type}:`, error);
+      });
+    }
+    modules.push(newModule);
+    selectedModule = newModule;
 
-  if (type === 'AudioPlayer') {
-    createAudioPlayerUI(newModule);
+    if (type === 'AudioPlayer') {
+      createAudioPlayerUI(newModule);
+    }
+  } catch (error) {
+    console.error(`Error adding module ${type}:`, error);
+    showError(`Error al añadir módulo ${type}`);
   }
 }
 
 function createAudioPlayerUI(module) {
-  const template = document.getElementById('audio-player-template');
-  const ui = template.cloneNode(true);
-  ui.id = `audioplayer-ui-${module.id}`;
-  document.body.appendChild(ui);
-  module.ui = ui; // Store reference to the UI element
-
-  const fileInput = ui.querySelector('.audio-file-input');
-  fileInput.addEventListener('change', (e) => module.loadFile(e.target.files[0]));
-
-  const playStopBtn = ui.querySelector('.play-stop-btn');
-  playStopBtn.addEventListener('click', () => {
-    if (module.isPlaying) {
-      module.stop();
-      playStopBtn.textContent = 'Play';
-    } else {
-      module.play();
-      playStopBtn.textContent = 'Stop';
+  try {
+    const template = document.getElementById('audio-player-template');
+    if (!template) {
+      console.warn("Audio player template not found");
+      return;
     }
-  });
 
-  const loopCheckbox = ui.querySelector('.loop-checkbox');
-  loopCheckbox.addEventListener('change', (e) => {
-    module.loop = e.target.checked;
-    if (module.source) {
-        module.source.loop = module.loop;
+    const ui = template.content.cloneNode(true);
+    const uiContainer = document.createElement('div');
+    uiContainer.appendChild(ui);
+    document.body.appendChild(uiContainer);
+
+    module.ui = uiContainer.firstElementChild;
+    module.ui.id = `audioplayer-ui-${module.id}`;
+
+    const fileInput = module.ui.querySelector('.audio-file-input');
+    if (fileInput) {
+      fileInput.addEventListener('change', (e) => {
+        try {
+          module.loadFile(e.target.files[0]);
+        } catch (error) {
+          console.error("Error loading audio file:", error);
+          showError("Error al cargar el archivo de audio");
+        }
+      });
     }
-  });
 
-  // Prevent module dragging when interacting with the UI
-  ui.addEventListener('mousedown', (e) => e.stopPropagation());
+    const playStopBtn = module.ui.querySelector('.play-stop-btn');
+    if (playStopBtn) {
+      playStopBtn.addEventListener('click', () => {
+        try {
+          if (module.isPlaying) {
+            module.stop();
+            playStopBtn.textContent = 'Play';
+          } else {
+            module.play();
+            playStopBtn.textContent = 'Stop';
+          }
+        } catch (error) {
+          console.error("Error toggling play/stop:", error);
+          showError("Error al reproducir/detener audio");
+        }
+      });
+    }
+
+    const loopCheckbox = module.ui.querySelector('.loop-checkbox');
+    if (loopCheckbox) {
+      loopCheckbox.addEventListener('change', (e) => {
+        try {
+          module.loop = e.target.checked;
+          if (module.source) {
+              module.source.loop = module.loop;
+          }
+        } catch (error) {
+          console.error("Error setting loop:", error);
+        }
+      });
+    }
+
+    module.ui.addEventListener('mousedown', (e) => e.stopPropagation());
+  } catch (error) {
+    console.error("Error creating audio player UI:", error);
+  }
 }
 
-// Event handlers
+// Event Handlers
 function onMouseDown(e) {
-  e.preventDefault();
-  if (interactingModule) return;
+  try {
+    e.preventDefault();
+    if (interactingModule) return;
 
-  mousePos = { x: e.clientX, y: e.clientY };
-  const worldPos = screenToWorld(mousePos.x, mousePos.y);
+    mousePos = { x: e.clientX, y: e.clientY };
+    const worldPos = screenToWorld(mousePos.x, mousePos.y);
 
-  if (e.button === 1 || e.altKey) { 
-    isPanning = true; 
-    lastMousePos = mousePos; 
-    canvas.classList.add('grabbing');
-    return; 
-  }
-
-  if (e.button === 0) {
-    patchContextMenu.style.display = 'none';
-    const connectorHit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
-    
-    if (connectorHit && connectorHit.connector.type === 'output') {
-      isPatching = true;
-      patchStart = {
-        x: connectorHit.module.x + connectorHit.connector.props.x,
-        y: connectorHit.module.y + connectorHit.connector.props.y,
-        module: connectorHit.module,
-        connector: connectorHit.connector
-      };
+    if (e.button === 1 || e.altKey) {
+      isPanning = true;
+      lastMousePos = mousePos;
+      canvas.classList.add('grabbing');
       return;
     }
 
-    const moduleHit = getModuleAt(worldPos.x, worldPos.y);
-    if (moduleHit) {
-      selectedModule = moduleHit;
-      selectedConnection = null;
-      
-      // --- INICIO DE LA MODIFICACIÓN ---
-      // Comprobar si se ha hecho clic en un control interactivo del módulo (como el slider del teclado)
-      if (moduleHit.handleMouseDown?.(worldPos.x, worldPos.y)) {
-        interactingModule = moduleHit;
-        return; // Evitar que el módulo se arrastre
-      }
-      // --- FIN DE LA MODIFICACIÓN ---
-      
-      if (moduleHit.checkInteraction?.(worldPos)) {
-        interactingModule = moduleHit;
+    if (e.button === 0) {
+      patchContextMenu.style.display = 'none';
+      const connectorHit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
+
+      if (connectorHit && connectorHit.connector.type === 'output') {
+        isPatching = true;
+        patchStart = {
+          x: connectorHit.module.x + connectorHit.connector.props.x,
+          y: connectorHit.module.y + connectorHit.connector.props.y,
+          module: connectorHit.module,
+          connector: connectorHit.connector
+        };
         return;
       }
-      
-      if (moduleHit.handleClick?.(worldPos.x, worldPos.y)) {
-        interactingModule = moduleHit;
+
+      const moduleHit = getModuleAt(worldPos.x, worldPos.y);
+      if (moduleHit) {
+        selectedModule = moduleHit;
+        selectedConnection = null;
+
+        if (moduleHit.handleMouseDown?.(worldPos.x, worldPos.y)) {
+          interactingModule = moduleHit;
+          return;
+        }
+
+        if (moduleHit.checkInteraction?.(worldPos)) {
+          interactingModule = moduleHit;
+          return;
+        }
+
+        if (moduleHit.handleClick?.(worldPos.x, worldPos.y)) {
+          interactingModule = moduleHit;
+          return;
+        }
+
+        draggingModule = moduleHit;
+        dragOffset.x = worldPos.x - moduleHit.x;
+        dragOffset.y = worldPos.y - moduleHit.y;
         return;
       }
-      
-      draggingModule = moduleHit;
-      dragOffset.x = worldPos.x - moduleHit.x;
-      dragOffset.y = worldPos.y - moduleHit.y;
-      return;
-    }
-    
-    const connectionHit = getConnectionAt(worldPos.x, worldPos.y);
-    if (connectionHit) {
-      selectedConnection = connectionHit;
+
+      const connectionHit = getConnectionAt(worldPos.x, worldPos.y);
+      if (connectionHit) {
+        selectedConnection = connectionHit;
+        selectedModule = null;
+        return;
+      }
+
       selectedModule = null;
-      return;
+      selectedConnection = null;
+      isPanning = true;
+      lastMousePos = mousePos;
+      canvas.classList.add('grabbing');
     }
-
-    selectedModule = null;
-    selectedConnection = null;
-    isPanning = true;
-    lastMousePos = mousePos;
-    canvas.classList.add('grabbing');
+  } catch (error) {
+    console.error("Error in mouse down handler:", error);
   }
 }
 
 function onMouseMove(e) {
-  e.preventDefault();
-  mousePos = { x: e.clientX, y: e.clientY };
-  const worldPos = screenToWorld(mousePos.x, mousePos.y);
-  
-  const hit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
-  hoveredConnectorInfo = hit;
-  canvas.style.cursor = hit ? 'pointer' : (isPanning ? 'grabbing' : 'grab');
+  try {
+    e.preventDefault();
+    mousePos = { x: e.clientX, y: e.clientY };
+    const worldPos = screenToWorld(mousePos.x, mousePos.y);
 
-  // --- INICIO DE LA MODIFICACIÓN ---
-  if (interactingModule?.handleMouseDrag?.(worldPos.x, worldPos.y)) {
-    // El módulo está manejando el arrastre (p. ej., el slider)
-  } else if (draggingModule) {
-    draggingModule.x = worldPos.x - dragOffset.x;
-    draggingModule.y = worldPos.y - dragOffset.y;
-  } 
-  // --- FIN DE LA MODIFICACIÓN ---
-  else if (interactingModule?.handleDragInteraction) {
-    interactingModule.handleDragInteraction(worldPos);
-  } 
-  else if (isPanning) {
-    view.x += e.movementX;
-    view.y += e.movementY;
+    const hit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
+    hoveredConnectorInfo = hit;
+    canvas.style.cursor = hit ? 'pointer' : (isPanning ? 'grabbing' : 'grab');
+
+    if (interactingModule?.handleMouseDrag?.(worldPos.x, worldPos.y)) {
+      // El módulo está manejando el arrastre
+    } else if (draggingModule) {
+      draggingModule.x = worldPos.x - dragOffset.x;
+      draggingModule.y = worldPos.y - dragOffset.y;
+    } else if (interactingModule?.handleDragInteraction) {
+      interactingModule.handleDragInteraction(worldPos);
+    } else if (isPanning) {
+      view.x += e.movementX;
+      view.y += e.movementY;
+    }
+  } catch (error) {
+    console.error("Error in mouse move handler:", error);
   }
 }
 
 function onMouseUp(e) {
-  e.preventDefault();
-  canvas.classList.remove('grabbing');
-  canvas.style.cursor = 'grab';
+  try {
+    e.preventDefault();
+    canvas.classList.remove('grabbing');
+    canvas.style.cursor = 'grab';
 
-  // --- INICIO DE LA MODIFICACIÓN ---
-  if (interactingModule?.handleMouseUp?.()) {
-    // El módulo ha manejado el evento, así que lo liberamos
-  } else if (interactingModule?.endInteraction) {
-    interactingModule.endInteraction();
-  }
-  // --- FIN DE LA MODIFICACIÓN ---
-
-  if (isPatching) {
-    const worldPos = screenToWorld(mousePos.x, mousePos.y);
-    const hit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
-    
-    if (hit && hit.connector.type === 'input' && hit.module !== patchStart.module) {
-      connectNodes(patchStart.connector.props, hit.connector.props);
-      connections.push({
-        fromModule: patchStart.module,
-        fromConnector: patchStart.connector,
-        toModule: hit.module,
-        toConnector: hit.connector,
-        type: patchStart.connector.props.type
-      });
+    if (interactingModule?.handleMouseUp?.()) {
+      // El módulo ha manejado el evento
+    } else if (interactingModule?.endInteraction) {
+      interactingModule.endInteraction();
     }
+
+    if (isPatching) {
+      const worldPos = screenToWorld(mousePos.x, mousePos.y);
+      const hit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
+
+      if (hit && hit.connector.type === 'input' && hit.module !== patchStart.module) {
+        const success = connectNodes(patchStart.connector.props, hit.connector.props);
+        if (success) {
+          connections.push({
+            fromModule: patchStart.module,
+            fromConnector: patchStart.connector,
+            toModule: hit.module,
+            toConnector: hit.connector,
+            type: patchStart.connector.props.type
+          });
+        }
+      }
+    }
+
+    draggingModule = null;
+    isPatching = false;
+    patchStart = null;
+    isPanning = false;
+    interactingModule = null;
+  } catch (error) {
+    console.error("Error in mouse up handler:", error);
   }
-  
-  draggingModule = null;
-  isPatching = false;
-  patchStart = null;
-  isPanning = false;
-  interactingModule = null;
 }
 
 function onContextMenu(e) {
-  e.preventDefault();
-  const worldPos = screenToWorld(e.clientX, e.clientY);
-  if (getModuleAt(worldPos.x, worldPos.y)) return;
+  try {
+    e.preventDefault();
+    const worldPos = screenToWorld(e.clientX, e.clientY);
+    const moduleHit = getModuleAt(worldPos.x, worldPos.y);
 
-  contextMenu.style.left = `${e.clientX}px`;
-  contextMenu.style.top = `${e.clientY}px`;
-  contextMenu.style.display = 'block';
+    if (moduleHit) {
+      showModuleContextMenu(moduleHit, e.clientX, e.clientY);
+    } else {
+      contextMenu.style.left = `${e.clientX}px`;
+      contextMenu.style.top = `${e.clientY}px`;
+      contextMenu.style.display = 'block';
+    }
+  } catch (error) {
+    console.error("Error in context menu handler:", error);
+  }
+}
+
+function showModuleContextMenu(module, x, y) {
+    patchContextMenu.innerHTML = ''; // Clear previous items
+    patchContextMenu.style.left = `${x}px`;
+    patchContextMenu.style.top = `${y}px`;
+    patchContextMenu.style.display = 'block';
+
+    // Add "Duplicate" option
+    const duplicateItem = document.createElement('div');
+    duplicateItem.className = 'context-menu-item';
+    duplicateItem.textContent = 'Duplicar Módulo';
+    duplicateItem.addEventListener('click', () => {
+        const state = module.getState();
+        addModule(state.type, state.x + 20, state.y + 20);
+        patchContextMenu.style.display = 'none';
+    });
+    patchContextMenu.appendChild(duplicateItem);
+
+    // Add "Delete" option
+    if (!module.isPermanent) {
+        const deleteItem = document.createElement('div');
+        deleteItem.className = 'context-menu-item';
+        deleteItem.textContent = 'Eliminar Módulo';
+        deleteItem.addEventListener('click', () => {
+            selectedModule = module; // Select the module to be deleted
+            deleteSelection();
+            patchContextMenu.style.display = 'none';
+        });
+        patchContextMenu.appendChild(deleteItem);
+    }
 }
 
 function onKeyDown(e) {
-  if (e.target.tagName === 'INPUT') return;
-  
-  if (e.key === 'Delete' || e.key === 'Backspace') {
-    e.preventDefault();
-    deleteSelection();
-  }
-  
-  const keyboardModule = modules.find(m => m instanceof Keyboard);
-  if (keyboardModule) {
-    keyboardModule.handleKeyDown(e.key.toLowerCase());
+  try {
+    if (e.target.tagName === 'INPUT') return;
+
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      deleteSelection();
+    }
+
+    const keyboardModule = modules.find(m => m instanceof Keyboard);
+    if (keyboardModule) {
+      keyboardModule.handleKeyDown(e.key.toLowerCase());
+    }
+  } catch (error) {
+    console.error("Error in key down handler:", error);
   }
 }
 
 function onKeyUp(e) {
-  if (e.target.tagName === 'INPUT') return;
-  
-  const keyboardModule = modules.find(m => m instanceof Keyboard);
-  if (keyboardModule) {
-    keyboardModule.handleKeyUp(e.key.toLowerCase());
+  try {
+    if (e.target.tagName === 'INPUT') return;
+
+    const keyboardModule = modules.find(m => m instanceof Keyboard);
+    if (keyboardModule) {
+      keyboardModule.handleKeyUp(e.key.toLowerCase());
+    }
+  } catch (error) {
+    console.error("Error in key up handler:", error);
   }
 }
 
 function onWheel(e) {
-  e.preventDefault();
-  const worldPos = screenToWorld(e.clientX, e.clientY);
-  const zoomAmount = e.deltaY < 0 ? 1.1 : 1/1.1;
-  const newZoom = Math.max(view.minZoom, Math.min(view.maxZoom, view.zoom * zoomAmount));
-  
-  view.x = e.clientX - worldPos.x * newZoom;
-  view.y = e.clientY - worldPos.y * newZoom;
-  view.zoom = newZoom;
+  try {
+    e.preventDefault();
+    const worldPos = screenToWorld(e.clientX, e.clientY);
+    const zoomAmount = e.deltaY < 0 ? 1.1 : 1/1.1;
+    const newZoom = Math.max(view.minZoom, Math.min(view.maxZoom, view.zoom * zoomAmount));
+
+    view.x = e.clientX - worldPos.x * newZoom;
+    view.y = e.clientY - worldPos.y * newZoom;
+    view.zoom = newZoom;
+  } catch (error) {
+    console.error("Error in wheel handler:", error);
+  }
 }
 
-// Setup function
+// Setup Function
 async function setup() {
+  console.log('[DEBUG] setup() function started');
   try {
-    await initAudioContext();
-    
+    // Configure canvas
+    console.log('[DEBUG] Resizing canvas...');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    console.log('[DEBUG] Canvas resized.');
 
+    // Initialize AudioContext
+    try {
+      await initAudioContext();
+
+      // Load essential worklets
+      await Promise.all([
+        loadWorklet('ADSR', './worklets/adsr-processor.js'),
+        loadWorklet('Sequencer', './worklets/sequencer-processor.js'),
+        loadWorklet('VCO', './worklets/vco-processor.js'),
+        loadWorklet('PWM', './worklets/pwm-processor.js'),
+        loadWorklet('Vocoder', './worklets/vocoder-processor.js'),
+        loadWorklet('Math', './worklets/math-processor.js'),
+        loadWorklet('RingMod', './worklets/ring-mod-processor.js'),
+        loadWorklet('SampleAndHold', './worklets/sample-and-hold-processor.js')
+      ]);
+    } catch (error) {
+      console.error('Error initializing audio:', error);
+      showError("Audio no disponible. Algunas funciones pueden no trabajar.", 10000);
+      // Continue in degraded mode
+    }
+
+    // Create main modules
     const keyboard = new Keyboard(canvas.width / 2 - 125, canvas.height - 150, 'keyboard-main');
     modules.push(keyboard);
 
     const outputModule = {
       id: 'output-main',
-      x: canvas.width / 2 - 50, y: 50, width: 100, height: 80, 
+      x: canvas.width / 2 - 50, y: 50, width: 100, height: 80,
       isPermanent: true, type: 'Output',
-      inputs: { 'audio': { x: 0, y: 40, type: 'audio', target: audioContext.destination, orientation: 'horizontal' } },
+      inputs: {
+        'audio': {
+          x: 50, y: 40,
+          type: 'audio',
+          get target() { return audioContext.destination; }, // Dynamic getter
+          orientation: 'vertical'
+        }
+      },
       outputs: {},
       draw: function(ctx, isSelected) {
         ctx.save();
@@ -603,8 +894,7 @@ async function setup() {
         ctx.lineWidth = 2;
         ctx.fillRect(0, 0, this.width, this.height);
         ctx.strokeRect(0, 0, this.width, this.height);
-        
-        // Dibuja el icono del altavoz
+
         ctx.fillStyle = '#E0E0E0';
         const speakerX = this.width / 2;
         const speakerY = this.height / 2;
@@ -618,7 +908,6 @@ async function setup() {
         ctx.closePath();
         ctx.fill();
 
-        // Dibuja las ondas de sonido
         ctx.strokeStyle = '#E0E0E0';
         ctx.lineWidth = 2;
         for (let i = 0; i < 3; i++) {
@@ -627,7 +916,6 @@ async function setup() {
             ctx.stroke();
         }
 
-        // Dibuja el conector de entrada
         const connector = this.inputs.audio;
         ctx.beginPath();
         ctx.arc(connector.x, connector.y, 8, 0, Math.PI * 2);
@@ -643,51 +931,83 @@ async function setup() {
         }
         return null;
       },
-      getState: function() { return { id: this.id, type: this.type, x: this.x, y: this.y, isPermanent: this.isPermanent }; },
-      setState: function(state) { this.x = state.x; this.y = state.y; }
+      getState: function() {
+        return {
+          id: this.id,
+          type: this.type,
+          x: this.x,
+          y: this.y,
+          isPermanent: this.isPermanent
+        };
+      },
+      setState: function(state) {
+        this.x = state.x;
+        this.y = state.y;
+      }
     };
     modules.push(outputModule);
 
-    canvas.addEventListener('mousedown', onMouseDown, { passive: false });
-    canvas.addEventListener('mousemove', onMouseMove, { passive: false });
-    canvas.addEventListener('mouseup', onMouseUp, { passive: false });
-    canvas.addEventListener('contextmenu', onContextMenu, { passive: false });
-    canvas.addEventListener('wheel', onWheel, { passive: false });
+    // Set up event listeners
+    setupEventListeners();
+
     
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('keyup', onKeyUp);
-    
-    document.getElementById('save-patch-btn').addEventListener('click', savePatch);
-    document.getElementById('load-patch-btn').addEventListener('click', loadPatch);
-    
-    document.querySelectorAll('#context-menu .context-menu-item').forEach(item => {
-      item.addEventListener('click', async (e) => {
+
+    // Start drawing
+    draw();
+
+  } catch (error) {
+    console.error('Error during setup:', error);
+    showError("Error fatal al iniciar la aplicación. Por favor recarga la página.", 15000);
+  }
+}
+
+function setupEventListeners() {
+  canvas.addEventListener('mousedown', onMouseDown, { passive: false });
+  canvas.addEventListener('mousemove', onMouseMove, { passive: false });
+  canvas.addEventListener('mouseup', onMouseUp, { passive: false });
+  canvas.addEventListener('contextmenu', onContextMenu, { passive: false });
+  canvas.addEventListener('wheel', onWheel, { passive: false });
+
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keyup', onKeyUp);
+
+  document.getElementById('save-patch-btn').addEventListener('click', savePatch);
+  document.getElementById('load-patch-btn').addEventListener('click', loadPatch);
+
+  document.querySelectorAll('#context-menu .context-menu-item').forEach(item => {
+    item.addEventListener('click', async (e) => {
+      try {
         const moduleType = e.target.getAttribute('data-module');
         const worldPos = screenToWorld(
-          parseFloat(contextMenu.style.left.slice(0, -2)), 
+          parseFloat(contextMenu.style.left.slice(0, -2)),
           parseFloat(contextMenu.style.top.slice(0, -2))
         );
         await addModule(moduleType, worldPos.x, worldPos.y);
         contextMenu.style.display = 'none';
-      });
+      } catch (error) {
+        console.error("Error adding module from context menu:", error);
+      }
     });
+  });
 
-    window.addEventListener('click', (e) => {
-      if (!contextMenu.contains(e.target)) contextMenu.style.display = 'none';
-      if (!patchContextMenu.contains(e.target)) patchContextMenu.style.display = 'none';
-    });
+  window.addEventListener('click', (e) => {
+    if (!contextMenu.contains(e.target)) contextMenu.style.display = 'none';
+    if (!patchContextMenu.contains(e.target)) patchContextMenu.style.display = 'none';
+  });
 
-    window.addEventListener('resize', () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    });
+  window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  });
 
-    draw();
-    
-  } catch (error) {
-    console.error('Error during setup:', error);
-  }
+  window.electronAPI.onRequestLoadPatch(loadPatch);
+  window.electronAPI.onRequestSavePatch(savePatch);
 }
 
-// Start the application
-setup();
+// Start the application when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('[DEBUG] DOMContentLoaded event fired');
+  setup().catch(error => {
+    console.error("Fatal error during application startup:", error);
+  });
+});

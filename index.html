@@ -10,6 +10,9 @@
     <div id="ui-container">
         <button id="save-patch-btn">Guardar Patch</button>
         <button id="load-patch-btn">Cargar Patch</button>
+        <div id="audio-status" style="margin-left: 10px; color: #E0E0E0;">
+        Audio: Clic en la página para activar
+        </div>
     </div>
     <canvas id="synth-canvas"></canvas>
     
@@ -35,16 +38,20 @@
 
     <div id="patch-context-menu" class="context-menu"></div>
 
-    <div id="audio-player-template" class="module-ui-overlay" style="display: none; position: absolute; padding: 5px; color: #E0E0E0; z-index: 10; width: 190px;">
-        <input type="file" class="audio-file-input" accept="audio/*" style="width: 100%; margin-bottom: 5px;">
-        <div style="display: flex; justify-content: space-around; align-items: center;">
-            <button class="play-stop-btn">Play</button>
-            <label class="loop-label" style="font-size: 12px;">
-                Loop:
-                <input type="checkbox" class="loop-checkbox" checked>
-            </label>
+    <template id="audio-player-template">
+        <div class="module-ui-overlay" style="position: absolute; padding: 5px; color: #E0E0E0; z-index: 10; width: 190px; background: #222; border: 1px solid #444;">
+            <input type="file" class="audio-file-input" accept="audio/*" style="width: 100%; margin-bottom: 5px;">
+            <div style="display: flex; justify-content: space-around; align-items: center;">
+                <button class="play-stop-btn" style="background: #4a90e2; border: none; color: white; padding: 3px 8px; border-radius: 3px;">Play</button>
+                <label class="loop-label" style="font-size: 12px;">
+                    Loop:
+                    <input type="checkbox" class="loop-checkbox" checked>
+                </label>
+            </div>
         </div>
-    </div>
+    </template>
+
+    <div id="error-message" style="display: none; position: fixed; top: 0; left: 0; right: 0; background: red; color: white; padding: 10px; z-index: 1000;"></div>
 
     <script src="renderer.js" type="module"></script>
 </body>

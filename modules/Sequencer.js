@@ -235,8 +235,34 @@ export class Sequencer {
 
     drawVerticalSlider(ctx, paramName, x, y, height, minVal, maxVal, currentValue) { const knobRadius = 4; ctx.strokeStyle = '#555'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + height); ctx.stroke(); const normalizedValue = (currentValue - minVal) / (maxVal - minVal); const knobY = y + height - (normalizedValue * height); ctx.beginPath(); ctx.arc(x, knobY, knobRadius, 0, Math.PI * 2); ctx.fillStyle = this.activeControl === paramName ? '#aaffff' : '#4a90e2'; ctx.fill(); }
     drawKnob(ctx, paramName, label, x, y, min, max, value) { const knobRadius = 18; const angleRange = Math.PI * 1.5; const startAngle = Math.PI * 0.75; const normalizedValue = (value - min) / (max - min); const angle = startAngle + normalizedValue * angleRange; ctx.font = '10px Arial'; ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'center'; ctx.fillText(label, x, y - knobRadius - 5); ctx.fillText(paramName === 'numberOfSteps' ? Math.round(value) : value.toFixed(0), x, y + knobRadius + 12); ctx.strokeStyle = '#555'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, knobRadius, startAngle, startAngle + angleRange); ctx.stroke(); ctx.strokeStyle = '#4a90e2'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(angle) * knobRadius, y + Math.sin(angle) * knobRadius); ctx.stroke(); this.hotspots[paramName] = { x: x - knobRadius, y: y - knobRadius, width: knobRadius * 2, height: knobRadius * 2, min, max, type: 'knob' }; }
-    drawButton(ctx, paramName, text, x, y, w, h) { ctx.fillStyle = this.params.running ? '#4a90e2' : '#777'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#E0E0E0'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, x + w / 2, y + h / 2); this.hotspots[paramName] = { x, y, width: w, height: h, type: 'button' }; }
-    drawSelector(ctx, paramName, label, x, y, w, h, value) { ctx.strokeStyle = '#E0E0E0'; ctx.strokeRect(x, y, w, h); ctx.fillStyle = '#E0E0E0'; ctx.font = '10px Arial'; ctx.textAlign = 'center'; ctx.fillText(label, x + w / 2, y - 5); ctx.font = 'bold 12px Arial'; ctx.textBaseline = 'middle'; ctx.fillText(value, x + w / 2, y + h / 2); this.hotspots[paramName] = { x, y, width: w, height: h, type: 'selector' }; }
+    drawButton(ctx, paramName, text, x, y, w, h) { 
+        ctx.fillStyle = this.params.running ? '#4a90e2' : '#333';
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 1;
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeRect(x, y, w, h);
+        ctx.fillStyle = '#E0E0E0'; 
+        ctx.font = 'bold 12px Arial'; 
+        ctx.textAlign = 'center'; 
+        ctx.textBaseline = 'middle'; 
+        ctx.fillText(text, x + w / 2, y + h / 2); 
+        this.hotspots[paramName] = { x, y, width: w, height: h, type: 'button' }; 
+    }
+    drawSelector(ctx, paramName, label, x, y, w, h, value) { 
+        ctx.fillStyle = '#333';
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 1;
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeRect(x, y, w, h);
+        ctx.fillStyle = '#E0E0E0'; 
+        ctx.font = '10px Arial'; 
+        ctx.textAlign = 'center'; 
+        ctx.fillText(label, x + w / 2, y - 5); 
+        ctx.font = 'bold 12px Arial'; 
+        ctx.textBaseline = 'middle'; 
+        ctx.fillText(value, x + w / 2, y + h / 2); 
+        this.hotspots[paramName] = { x, y, width: w, height: h, type: 'selector' }; 
+    }
     drawConnectors(ctx, hovered) { const connectorRadius = 8; ctx.font = '10px Arial'; Object.entries(this.outputs).forEach(([name, props]) => { const isHovered = hovered?.module === this && hovered?.connector.name === name; const ox = props.x, oy = props.y; ctx.beginPath(); ctx.arc(ox, oy, connectorRadius, 0, Math.PI * 2); ctx.fillStyle = isHovered ? 'white' : '#222'; ctx.fill(); ctx.strokeStyle = '#4a90e2'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'right'; ctx.fillText(name, ox - connectorRadius - 4, oy + 4); }); }
     isInside(pos, rect) { return pos.x >= rect.x && pos.x <= rect.x + rect.width && pos.y >= rect.y && pos.y <= rect.y + rect.height; }
     getConnectorAt(x, y) { const localX = x - this.x, localY = y - this.y; for (const [name, props] of Object.entries(this.outputs)) if (Math.hypot(localX - props.x, localY - props.y) < 9) return { name, type: 'output', props, module: this }; return null; }

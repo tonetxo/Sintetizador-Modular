@@ -2,103 +2,103 @@
 import { audioContext } from './AudioContext.js';
 
 export class VCO {
-    constructor(x, y, id = null, initialState = {}) { // Añadido id y initialState para carga/guardado
-        this.id = id || `vco-${Date.now()}`; // Genera un ID único si no se proporciona
+    constructor(x, y, id = null, initialState = {}) {
+        this.id = id || `vco-${Date.now()}`;
+        this.type = 'VCO';
         this.x = x;
         this.y = y;
-        this.width = 160;
-        this.height = 180; // Aumentar altura para acomodar el detune (antes 140)
-        this.type = 'VCO';
+        this.width = 250;
+        this.height = 420; // Aumentamos la altura para los nuevos controles
 
-        this.oscillator = audioContext.createOscillator();
-        this.oscillator.frequency.setValueAtTime(0, audioContext.currentTime);
-        this.oscillator.detune.setValueAtTime(0, audioContext.currentTime); // Inicializar detune a 0
-        this.oscillator.start();
+        this.waveforms = ['sine', 'square', 'sawtooth', 'triangle'];
 
-        const bufferSize = audioContext.sampleRate * 2;
-        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
-        const output = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-            output[i] = Math.random() * 2 - 1;
-        }
-        this.noise = audioContext.createBufferSource();
-        this.noise.buffer = buffer;
-        this.noise.loop = true;
-        this.noise.start();
-        
-        this.output = audioContext.createGain();
-        this.activeSource = this.oscillator;
-        this.activeSource.connect(this.output);
-
-        // Conexión para mantener el procesador activo
-        this.keepAliveNode = audioContext.createGain();
-        this.keepAliveNode.gain.value = 0;
-        this.output.connect(this.keepAliveNode);
-        this.keepAliveNode.connect(audioContext.destination);
-
-        this.inputs = {
-            '1V/Oct': { x: 30, y: this.height, type: 'cv', target: this.oscillator.frequency, orientation: 'vertical' },
-            'FM': { x: 80, y: this.height, type: 'cv', target: this.oscillator.frequency, orientation: 'vertical' },
-            'DETUNE_CV': { x: 130, y: this.height, type: 'cv', target: this.oscillator.detune, orientation: 'vertical' }
+        this.params = {
+            frequency: initialState.frequency || 440,
+            detune: initialState.detune || 0,
+            waveform: (initialState.waveform !== undefined && initialState.waveform !== null && this.waveforms.includes(initialState.waveform)) ? initialState.waveform : 'sawtooth',
+            pulseWidth: initialState.pulseWidth || 0.5, // Nuevo parámetro para PWM
         };
-        this.outputs = {
-            'audio': { x: this.width, y: this.height / 2, type: 'audio', source: this.output, orientation: 'horizontal' }
-        };
+
+        this.activeControl = null;
+        this.hotspots = {};
+
+        this.readyPromise = this.initWorklet(initialState);
+    }
+
+    async initWorklet(initialState) {
+        try {
+            // Un único worklet se encargará de todas las formas de onda
+            this.workletNode = new AudioWorkletNode(audioContext, 'vco-processor');
+
+            // Conectar parámetros del worklet para control en tiempo real
+            this.frequencyParam = this.workletNode.parameters.get('frequency');
+            this.pulseWidthParam = this.workletNode.parameters.get('pulseWidth');
+            this.detuneParam = this.workletNode.parameters.get('detune');
+            
+            // Estas son las entradas reales para la modulación desde otros módulos
+            this.vOctInNode = this.workletNode.parameters.get('vOct');
+            this.pwmInNode = this.workletNode.parameters.get('pwm');
+
+            this.output = audioContext.createGain();
+            this.workletNode.connect(this.output);
+            
+            if (initialState && Object.keys(initialState).length > 0) {
+                this.setState(initialState);
+            } else {
+                this.updateParams();
+            }
+
+            // Enviar la forma de onda inicial al worklet
+            this.workletNode.port.postMessage({
+                type: 'waveform',
+                value: this.waveforms.indexOf(this.params.waveform)
+            });
+
+        } catch(error) {
+            console.error(`[VCO-${this.id}] Error initializing worklet:`, error);
+        }
+    }
+
+    updateParams() {
+        if (!this.workletNode) return;
+        const waveformIndex = this.waveforms.indexOf(this.params.waveform);
+        console.log(`[VCO-${this.id}] updateParams - waveform: ${this.params.waveform}, index: ${waveformIndex}`);
         
-        this.waveforms = ['sawtooth', 'square', 'sine', 'triangle', 'noise'];
-        this.currentWaveformIndex = 0;
-        this.detuneValue = 0; // Valor actual del detune (para el slider y el estado)
-
-        // Aplicar estado inicial si existe (para carga de patch)
-        if (Object.keys(initialState).length > 0) {
-            this.setState(initialState);
+        this.frequencyParam.setTargetAtTime(this.params.frequency, audioContext.currentTime, 0.01);
+        this.detuneParam.setTargetAtTime(this.params.detune, audioContext.currentTime, 0.01);
+        this.pulseWidthParam.setTargetAtTime(this.params.pulseWidth, audioContext.currentTime, 0.01);
+        
+        // Enviar la forma de onda como mensaje al worklet
+        if (waveformIndex !== -1) {
+            this.workletNode.port.postMessage({
+                type: 'waveform',
+                value: waveformIndex
+            });
         } else {
-            this.setWaveform(this.waveforms[this.currentWaveformIndex]);
+            console.warn(`[VCO-${this.id}] Invalid waveform: ${this.params.waveform}. Setting to default (sawtooth).`);
+            this.workletNode.port.postMessage({
+                type: 'waveform',
+                value: this.waveforms.indexOf('sawtooth')
+            });
         }
     }
 
-    setWaveform(type) {
-        // Desconectar el activo antes de cambiar
-        if (this.activeSource) {
-            this.activeSource.disconnect(this.output);
-            // Asegurarse de que el AudioParam detune y frequency no estén conectados al antiguo activeSource
-            // si cambiamos de oscillator a noise.
-            // Para OscillatorNode, frequency y detune son AudioParams, no necesitan desconectarse directamente
-            // a menos que cambies el destino de esos AudioParams.
-            // Aquí, los AudioParams (frequency, detune) siempre controlan this.oscillator,
-            // por lo que no hay problema con desconectar this.activeSource del output.
-        }
-
-        const waveformName = this.waveforms[this.currentWaveformIndex];
-
-        if (waveformName === 'noise') {
-            this.activeSource = this.noise;
-            // Para el ruido, la frecuencia y detune del oscilador no aplican,
-            // pero el noise.buffer es constante, así que no necesitamos hacer nada especial aquí.
-        } else {
-            this.activeSource = this.oscillator;
-            this.oscillator.type = waveformName;
-        }
-        this.activeSource.connect(this.output);
+    get inputs() {
+        return {
+            '1v/oct': { x: 0, y: this.height / 2 - 30, type: 'cv', target: this.vOctInNode, orientation: 'horizontal' },
+            'PWM': { x: 0, y: this.height / 2 + 30, type: 'cv', target: this.pwmInNode, orientation: 'horizontal' },
+        };
     }
 
-    // Método para establecer el valor del detune directamente (desde UI)
-    setDetune(value) {
-        if (!isFinite(value)) return; // Guarda contra valores no finitos
-        // Redondea a un decimal para mantenerlo limpio
-        let detuneVal = Math.round(value * 10) / 10;
-        // Evitar -0 que puede causar problemas
-        if (Object.is(detuneVal, -0)) {
-            detuneVal = 0;
-        }
-        this.detuneValue = detuneVal;
-        this.oscillator.detune.setValueAtTime(this.detuneValue, audioContext.currentTime);
+    get outputs() {
+        return {
+            'Out': { x: this.width, y: this.height / 2, type: 'audio', source: this.output, orientation: 'horizontal' }
+        };
     }
-
+    
     draw(ctx, isSelected, hoveredConnectorInfo) {
         ctx.save();
         ctx.translate(this.x, this.y);
-
         ctx.fillStyle = '#222';
         ctx.strokeStyle = isSelected ? '#aaffff' : '#E0E0E0';
         ctx.lineWidth = 2;
@@ -110,234 +110,161 @@ export class VCO {
         ctx.textAlign = 'center';
         ctx.fillText('VCO', this.width / 2, 22);
 
-        // Dibujo del selector de forma de onda
-        ctx.beginPath();
-        ctx.arc(this.width / 2, 75, 25, 0, Math.PI * 2);
-        ctx.stroke();
-        this.drawWaveform(ctx, this.width / 2, 75, 18);
-
-        // --- Dibujar control de Detune Fino ---
-        const detuneControlY = 115; // Subido para dejar espacio a los conectores
-        const sliderWidth = this.width - 20; // Ancho del slider
-        const sliderX = 10; // Posición X del slider
-        const knobRadius = 8; // Radio del "pomo" del slider
-
-        // Etiqueta Detune
-        ctx.fillStyle = '#E0E0E0';
-        ctx.font = '10px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillText('DETUNE', sliderX, detuneControlY - 18);
-
-        // Dibujar barra del slider
-        ctx.strokeStyle = '#555';
-        ctx.lineWidth = 4; // Un poco más gruesa para mejor estética
-        ctx.beginPath();
-        ctx.moveTo(sliderX, detuneControlY + knobRadius / 2);
-        ctx.lineTo(sliderX + sliderWidth, detuneControlY + knobRadius / 2);
-        ctx.stroke();
-
-        // Dibujar el pomo del slider
-        const normalizedDetune = (this.detuneValue + 50) / 100; // Mapear de -50 a 50 a 0-1
-        const knobX = sliderX + (sliderWidth * normalizedDetune);
-        ctx.beginPath();
-        ctx.arc(knobX, detuneControlY + knobRadius / 2, knobRadius, 0, Math.PI * 2);
-        ctx.fillStyle = '#4a90e2'; // Color del pomo
-        ctx.fill();
-        ctx.strokeStyle = '#E0E0E0';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // Mostrar valor de Detune
-        ctx.textAlign = 'right';
-        ctx.fillText(`${this.detuneValue.toFixed(1)}c`, sliderX + sliderWidth, detuneControlY - 18);
-        // --- Fin del control de Detune Fino ---
+        this.drawKnob(ctx, 'frequency', 'FREQ', this.width / 2, 80, 20, 5000, this.params.frequency);
+        this.drawKnob(ctx, 'detune', 'FINE', this.width / 2, 170, -100, 100, this.params.detune);
+        
+        if (this.params.waveform === 'square') {
+            this.drawKnob(ctx, 'pulseWidth', 'PW', this.width / 2, 260, 0.01, 0.99, this.params.pulseWidth);
+        }
+        
+        this.drawSelector(ctx, 'waveform', 'WAVE', this.width / 2, 350, 100, 30, this.params.waveform);
 
         this.drawConnectors(ctx, hoveredConnectorInfo);
         ctx.restore();
     }
     
-    drawWaveform(ctx, cx, cy, radius) {
-        ctx.save();
-        ctx.strokeStyle = '#E0E0E0';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        const type = this.waveforms[this.currentWaveformIndex];
-        if (type === 'noise') {
-            ctx.font = 'bold 30px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('*', cx, cy);
-        } else if (type === 'sawtooth') {
-            ctx.moveTo(cx - radius, cy + radius/2);
-            ctx.lineTo(cx, cy - radius);
-            ctx.lineTo(cx, cy + radius);
-            ctx.lineTo(cx + radius, cy - radius/2);
-        } else if (type === 'square') {
-            ctx.moveTo(cx - radius, cy + radius/2);
-            ctx.lineTo(cx - radius, cy - radius/2);
-            ctx.lineTo(cx, cy - radius/2);
-            ctx.lineTo(cx, cy + radius/2);
-            ctx.lineTo(cx + radius, cy + radius/2);
-        } else if (type === 'sine') {
-             ctx.moveTo(cx - radius, cy);
-             ctx.quadraticCurveTo(cx - radius/2, cy - radius, cx, cy);
-             ctx.quadraticCurveTo(cx + radius/2, cy + radius, cx + radius, cy);
-        } else if (type === 'triangle') {
-            ctx.moveTo(cx - radius, cy + radius/2);
-            ctx.lineTo(cx - radius/2, cy - radius/2);
-            ctx.lineTo(cx + radius/2, cy + radius/2);
-            ctx.lineTo(cx + radius, cy - radius/2);
+    drawKnob(ctx, paramName, label, x, y, min, max, value) {
+        const knobRadius = 22;
+        const angleRange = Math.PI * 1.5;
+        const startAngle = Math.PI * 0.75;
+        let normalizedValue = (value - min) / (max - min);
+        if (paramName === 'frequency') {
+            normalizedValue = (Math.log(value) - Math.log(min)) / (Math.log(max) - Math.log(min));
         }
-        ctx.stroke();
-        ctx.restore();
+        const angle = startAngle + normalizedValue * angleRange;
+        ctx.font = '10px Arial'; ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'center';
+        ctx.fillText(label, x, y - knobRadius - 5);
+        const displayValue = paramName === 'frequency' ? `${value.toFixed(1)} Hz` : (paramName === 'pulseWidth' ? `${(value * 100).toFixed(0)}%` : `${value.toFixed(0)}c`);
+        ctx.fillText(displayValue, x, y + knobRadius + 12);
+        ctx.strokeStyle = '#555'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, knobRadius, startAngle, startAngle + angleRange); ctx.stroke();
+        ctx.strokeStyle = '#4a90e2'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(angle) * knobRadius, y + Math.sin(angle) * knobRadius); ctx.stroke();
+        this.hotspots[paramName] = { x: x - knobRadius, y: y - knobRadius, width: knobRadius * 2, height: knobRadius * 2, min, max, type: 'knob' };
     }
-
+    
+    drawSelector(ctx, paramName, label, x, y, w, h, value) {
+        ctx.strokeStyle = '#E0E0E0'; ctx.strokeRect(x - w/2, y, w, h);
+        ctx.fillStyle = '#E0E0E0'; ctx.font = '10px Arial'; ctx.textAlign = 'center'; ctx.fillText(label, x, y - 5);
+        ctx.font = 'bold 12px Arial'; ctx.textBaseline = 'middle';
+        // CORRECCIÓN: Aseguramos que 'value' sea un string antes de llamar a toUpperCase()
+        ctx.fillText(String(value).toUpperCase(), x, y + h/2);
+        this.hotspots[paramName] = { x: x - w/2, y, width: w, height: h, type: 'selector' };
+    }
+    
     drawConnectors(ctx, hovered) {
-        const isHovered = (type, name) => hovered && hovered.module === this && hovered.connector.type === type && hovered.connector.name === name;
         const connectorRadius = 8;
         ctx.font = '10px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#E0E0E0';
 
-        // Draw Inputs
         Object.entries(this.inputs).forEach(([name, props]) => {
-            const x = props.x;
-            const y = props.y;
+            if (this.params.waveform !== 'square' && name === 'PWM') return;
+            const ix = props.x;
+            const iy = props.y;
+            const isHovered = hovered?.module === this && hovered.connector.name === name;
             ctx.beginPath();
-            ctx.arc(x, y, connectorRadius, 0, Math.PI * 2);
-            ctx.fillStyle = isHovered('input', name) ? 'white' : '#4a90e2';
+            ctx.arc(ix, iy, connectorRadius, 0, Math.PI * 2);
+            ctx.fillStyle = isHovered ? 'white' : '#4a90e2';
             ctx.fill();
             ctx.fillStyle = '#E0E0E0';
-            ctx.fillText(name, x, y + connectorRadius + 12);
+            ctx.textAlign = 'left';
+            ctx.fillText(name.toUpperCase(), ix + connectorRadius + 4, iy + 4);
         });
 
-        // Draw Outputs
         Object.entries(this.outputs).forEach(([name, props]) => {
-            const x = props.x;
-            const y = props.y;
+            const ox = props.x;
+            const oy = props.y;
+            const isHovered = hovered?.module === this && hovered.connector.name === name;
             ctx.beginPath();
-            ctx.arc(x, y, connectorRadius, 0, Math.PI * 2);
-            ctx.fillStyle = isHovered('output', name) ? 'white' : '#222';
+            ctx.arc(ox, oy, connectorRadius, 0, Math.PI * 2);
+            ctx.fillStyle = isHovered ? 'white' : '#222';
             ctx.fill();
             ctx.strokeStyle = '#4a90e2';
             ctx.lineWidth = 1.5;
             ctx.stroke();
             ctx.fillStyle = '#E0E0E0';
             ctx.textAlign = 'right';
-            ctx.fillText('SALIDA', x - connectorRadius - 4, y + 4);
+            ctx.fillText(name.toUpperCase(), ox - connectorRadius - 4, oy + 4);
         });
     }
 
-    // Modificar handleClick para incluir la interacción del detune
+    isInside(pos, rect) {
+        return pos.x >= rect.x && pos.x <= rect.x + rect.width && pos.y >= rect.y && pos.y <= rect.y + rect.height;
+    }
+
+    checkInteraction(pos) {
+        const localPos = { x: pos.x - this.x, y: pos.y - this.y };
+        for (const [name, spot] of Object.entries(this.hotspots)) {
+            if (this.isInside(localPos, spot) && spot.type === 'knob') {
+                this.activeControl = name;
+                this.dragStart = { y: localPos.y, value: this.params[name] };
+                return true;
+            }
+        }
+        return false;
+    }
+
     handleClick(x, y) {
-        // Lógica de cambio de forma de onda
-        const symbolX = this.x + this.width / 2;
-        const symbolY = this.y + 75;
-        const distWaveform = Math.sqrt(Math.pow(x - symbolX, 2) + Math.pow(y - symbolY, 2));
-        if (distWaveform < 25) {
-            this.currentWaveformIndex = (this.currentWaveformIndex + 1) % this.waveforms.length;
-            this.setWaveform(this.waveforms[this.currentWaveformIndex]);
+        const localPos = { x: x - this.x, y: y - this.y };
+        if (this.isInside(localPos, this.hotspots['waveform'])) {
+            const currentIndex = this.waveforms.indexOf(this.params.waveform);
+            const nextIndex = (currentIndex + 1) % this.waveforms.length;
+            this.params.waveform = this.waveforms[nextIndex];
+            this.updateParams();
             return true;
         }
         return false;
     }
 
-    // Nuevo: checkInteraction para el slider de detune
-    checkInteraction(worldPos) {
-        const detuneControlY = this.y + 115; // Coincidir con la Y del dibujo
-        const sliderX = this.x + 10;
-        const sliderWidth = this.width - 20;
-        const knobRadius = 8;
-
-        // Comprobar si el clic está en el pomo del slider de detune
-        const normalizedDetune = (this.detuneValue + 50) / 100;
-        const knobCurrentX = sliderX + (sliderWidth * normalizedDetune);
-
-        const distKnob = Math.sqrt(
-            Math.pow(worldPos.x - knobCurrentX, 2) +
-            Math.pow(worldPos.y - (detuneControlY + knobRadius / 2), 2)
-        );
-
-        if (distKnob < knobRadius + 5) { // Un poco de margen de clic
-            this.isDraggingDetune = true;
-            return true; // Indica que se ha iniciado una interacción
-        }
-        return false;
-    }
-
-    // Nuevo: handleDragInteraction para mover el slider de detune
-    handleDragInteraction(worldPos) { // Ahora recibe el objeto worldPos completo
-        if (this.isDraggingDetune) {
-            const sliderOffsetX = 10; // Offset local del slider dentro del módulo
-            const sliderWidth = this.width - 20;
-            
-            // Calcula la posición relativa del clic dentro del slider
-            const relativeX = worldPos.x - (this.x + sliderOffsetX);
-            
-            // Convierte la posición relativa a un valor normalizado (0 a 1)
-            const normalizedValue = Math.max(0, Math.min(1, relativeX / sliderWidth));
-            
-            // Mapea el valor normalizado al rango de detune (-50 a 50)
-            const newDetune = (normalizedValue * 100) - 50;
-            this.setDetune(newDetune);
-        }
-    }
-
-    // Nuevo: endInteraction para el slider de detune
     endInteraction() {
-        this.isDraggingDetune = false;
+        this.activeControl = null;
     }
 
+    handleDragInteraction(worldPos) {
+        if (!this.activeControl) return;
+        const hotspot = this.hotspots[this.activeControl];
+        const localY = worldPos.y - this.y;
+        const dy = this.dragStart.y - localY;
+        let newValue;
+        if (this.activeControl === 'frequency') {
+            const logRange = Math.log(hotspot.max) - Math.log(hotspot.min);
+            const currentNorm = (Math.log(this.dragStart.value) - Math.log(hotspot.min)) / logRange;
+            const newNorm = Math.max(0, Math.min(1, currentNorm + dy * 0.005));
+            newValue = Math.exp(Math.log(hotspot.min) + newNorm * logRange);
+        } else {
+            newValue = this.dragStart.value + dy * ((hotspot.max - hotspot.min) / 128);
+        }
+        this.params[this.activeControl] = Math.max(hotspot.min, Math.min(hotspot.max, newValue));
+        this.updateParams();
+    }
 
     getConnectorAt(x, y) {
-        const connectorRadius = 9;
-        // Convertir coordenadas del mundo a coordenadas relativas al módulo
         const localX = x - this.x;
         const localY = y - this.y;
-
         for (const [name, props] of Object.entries(this.inputs)) {
-            const dist = Math.sqrt(Math.pow(localX - props.x, 2) + Math.pow(localY - props.y, 2));
-            if (dist < connectorRadius) return { name, type: 'input', props, module: this };
+            if (this.params.waveform !== 'square' && name === 'PWM') continue;
+            if (Math.hypot(localX - props.x, localY - props.y) < 9) return { name, type: 'input', props, module: this };
         }
         for (const [name, props] of Object.entries(this.outputs)) {
-            const dist = Math.sqrt(Math.pow(localX - props.x, 2) + Math.pow(localY - props.y, 2));
-            if (dist < connectorRadius) return { name, type: 'output', props, module: this };
+            if (Math.hypot(localX - props.x, localY - props.y) < 9) return { name, type: 'output', props, module: this };
         }
         return null;
     }
-    
-    disconnect() {
-        this.oscillator.disconnect();
-        this.noise.disconnect();
-        this.output.disconnect();
-        this.keepAliveNode?.disconnect();
-        // Asegurarse de desconectar AudioParams si alguna vez los conectas a otras fuentes CV
-        // Actualmente, solo son destinos, así que no es necesario desconectarlos de aquí.
-    }
-    
-    getState() {
-        return {
-            id: this.id, // Guardar ID
-            type: 'VCO',
-            x: this.x,
-            y: this.y,
-            waveform: this.waveforms[this.currentWaveformIndex],
-            detuneValue: this.detuneValue // Guardar el valor del detune
-        };
-    }
 
+    getState() { return { id: this.id, type: this.type, x: this.x, y: this.y, ...this.params }; }
     setState(state) {
-        this.x = state.x ?? this.x;
-        this.y = state.y ?? this.y;
-        this.id = state.id || this.id; // Cargar ID
-
-        const wfIndex = this.waveforms.indexOf(state.waveform);
-        this.currentWaveformIndex = (wfIndex !== -1) ? wfIndex : 0;
-        this.setWaveform(this.waveforms[this.currentWaveformIndex]);
-
-        // Cargar y aplicar el valor del detune
-        if (state.detuneValue !== undefined) {
-            this.setDetune(state.detuneValue);
+        this.id = state.id || this.id;
+        this.x = state.x; this.y = state.y;
+        // Asegurarse de que la forma de onda sea válida al cargar el estado
+        if (state.waveform !== undefined && state.waveform !== null && this.waveforms.includes(state.waveform)) {
+            this.params.waveform = state.waveform;
+        } else {
+            this.params.waveform = 'sawtooth'; // Valor por defecto si es inválido
         }
+        // Copiar el resto de los parámetros
+        Object.keys(state).forEach(key => {
+            if (key !== 'waveform') {
+                this.params[key] = state[key];
+            }
+        });
+        this.updateParams();
     }
+    disconnect() { this.workletNode?.disconnect(); this.output?.disconnect(); }
 }

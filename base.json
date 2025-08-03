@@ -3,73 +3,75 @@
     {
       "id": "keyboard-main",
       "type": "Keyboard",
-      "x": 397.5,
-      "y": 725,
+      "x": 334.5,
+      "y": 732,
       "isPermanent": true,
-      "portamentoTime": 0
+      "portamentoValue": 0.17307692307692307,
+      "octave": 4
     },
     {
       "id": "output-main",
       "type": "Output",
-      "x": 472.5,
-      "y": 50,
+      "x": 857.5,
+      "y": 123,
       "isPermanent": true
     },
     {
-      "id": "vco-1753909969657",
+      "id": "vco-1754196834506",
       "type": "VCO",
-      "x": 186,
-      "y": 274,
-      "waveform": "sawtooth",
-      "detuneValue": 0,
-      "portamentoTime": 0
+      "x": 269,
+      "y": 186,
+      "frequency": 440,
+      "detune": -1.5625,
+      "waveform": "square",
+      "pulseWidth": 0.4846875
     },
     {
-      "id": "adsr-1753909971685",
-      "type": "ADSR",
-      "x": 515,
-      "y": 319,
-      "attack": 0.01,
-      "decay": 0.1,
-      "sustain": 0.8,
-      "release": 0.2
-    },
-    {
-      "id": "vca-1753909974342",
+      "id": "vca-1754196840250",
       "type": "VCA",
-      "x": 636,
-      "y": 127
+      "x": 656,
+      "y": 111
+    },
+    {
+      "id": "adsr-1754196846386",
+      "type": "ADSR",
+      "x": 599,
+      "y": 336,
+      "attack": 0.6484583333333334,
+      "decay": 0.383125,
+      "sustain": 0.2375,
+      "release": 1.3406666666666667
     }
   ],
   "connections": [
     {
       "fromId": "keyboard-main",
       "fromConnector": "TENSION",
-      "toId": "vco-1753909969657",
-      "toConnector": "1V/Oct"
+      "toId": "vco-1754196834506",
+      "toConnector": "1v/oct"
     },
     {
       "fromId": "keyboard-main",
       "fromConnector": "DISPARO",
-      "toId": "adsr-1753909971685",
+      "toId": "adsr-1754196846386",
       "toConnector": "Gate"
     },
     {
-      "fromId": "adsr-1753909971685",
+      "fromId": "adsr-1754196846386",
       "fromConnector": "CV",
-      "toId": "vca-1753909974342",
+      "toId": "vca-1754196840250",
       "toConnector": "CV 1"
     },
     {
-      "fromId": "vco-1753909969657",
+      "fromId": "vca-1754196840250",
       "fromConnector": "audio",
-      "toId": "vca-1753909974342",
+      "toId": "output-main",
       "toConnector": "audio"
     },
     {
-      "fromId": "vca-1753909974342",
-      "fromConnector": "audio",
-      "toId": "output-main",
+      "fromId": "vco-1754196834506",
+      "fromConnector": "Out",
+      "toId": "vca-1754196840250",
       "toConnector": "audio"
     }
   ]
