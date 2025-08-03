@@ -150,10 +150,14 @@ export class ADSR {
     // Sliders
     const sliderHeight = 240;
     const sliderY = 40;
-    this.drawVerticalSlider(ctx, 'attack', 60, sliderY, sliderHeight, 0.01, 2, this.params.attack);
-    this.drawVerticalSlider(ctx, 'decay', 140, sliderY, sliderHeight, 0.01, 2, this.params.decay);
-    this.drawVerticalSlider(ctx, 'sustain', 220, sliderY, sliderHeight, 0, 1, this.params.sustain);
-    this.drawVerticalSlider(ctx, 'release', 300, sliderY, sliderHeight, 0.01, 5, this.params.release);
+    const numSliders = 4;
+    const totalWidth = this.width;
+    const spacing = totalWidth / (numSliders + 1);
+
+    this.drawVerticalSlider(ctx, 'attack', spacing, sliderY, sliderHeight, 0.01, 2, this.params.attack);
+    this.drawVerticalSlider(ctx, 'decay', spacing * 2, sliderY, sliderHeight, 0.01, 2, this.params.decay);
+    this.drawVerticalSlider(ctx, 'sustain', spacing * 3, sliderY, sliderHeight, 0, 1, this.params.sustain);
+    this.drawVerticalSlider(ctx, 'release', spacing * 4, sliderY, sliderHeight, 0.01, 5, this.params.release);
 
     ctx.restore();
     this.drawConnectors(ctx, hoveredConnectorInfo);

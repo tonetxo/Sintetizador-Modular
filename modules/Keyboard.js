@@ -50,23 +50,25 @@ export class Keyboard {
 
     handleKeyDown(key) {
         if (KEY_TO_MIDI[key] && !this.activeKeys.has(key)) {
+            const now = audioContext.currentTime;
+
+            // Si ya hay notas sonando (legato), re-disparamos el gate
+            if (this.activeKeys.size > 0) {
+                this.gateSignalNode.offset.setValueAtTime(0, now);
+                this.gateSignalNode.offset.setValueAtTime(1, now + 0.001); // Pulso muy corto
+            } else {
+                this.gateSignalNode.offset.setValueAtTime(1, now);
+            }
+
             this.activeKeys.add(key);
             const baseMidi = KEY_TO_MIDI[key];
             this.lastNote = baseMidi + (this.octave - 4) * 12;
             
-            // Calcular el valor de CV para 1V/Oct
-            // Asumimos que MIDI 60 (C5) es 0V
             const cvValue = (this.lastNote - 60) / 12;
             
-            const now = audioContext.currentTime;
-
             this.pitchCV.offset.cancelScheduledValues(now);
             this.pitchCV.offset.setValueAtTime(this.pitchCV.offset.value, now);
             this.pitchCV.offset.linearRampToValueAtTime(cvValue, now + this.portamentoTime);
-
-            if (this.activeKeys.size === 1) {
-                this.gateSignalNode.offset.setValueAtTime(1, now);
-            }
         }
     }
 

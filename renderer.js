@@ -879,10 +879,10 @@ async function setup() {
       isPermanent: true, type: 'Output',
       inputs: {
         'audio': {
-          x: 50, y: 40,
+          x: 0, y: 40, // Centrado verticalmente a la izquierda
           type: 'audio',
           get target() { return audioContext.destination; }, // Dynamic getter
-          orientation: 'vertical'
+          orientation: 'horizontal' // Cambiado para que la línea salga hacia la derecha
         }
       },
       outputs: {},
