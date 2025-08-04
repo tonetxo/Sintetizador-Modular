@@ -68,31 +68,43 @@ class SequencerProcessor extends AudioWorkletProcessor {
 
     _advanceStep() {
         const steps = this._params.numberOfSteps;
-        const direction = this._params.direction;
+        if (steps === 0) return;
 
-        switch (direction) {
-            case 0: // FWD
-                this._currentStep = (this._currentStep + 1) % steps;
-                break;
-            case 1: // BWD
-                this._currentStep = (this._currentStep - 1 + steps) % steps;
-                break;
-            case 2: // P-P
-                if (steps <= 1) { this._currentStep = 0; return; }
-                if (this._pingPongDirection === 1 && this._currentStep >= steps - 1) {
-                    this._pingPongDirection = -1;
-                    this._currentStep = Math.max(0, steps - 2);
-                } else if (this._pingPongDirection === -1 && this._currentStep <= 0) {
-                    this._pingPongDirection = 1;
-                    this._currentStep = Math.min(1, steps - 1);
-                } else {
-                    this._currentStep += this._pingPongDirection;
-                }
-                break;
-            case 3: // RND
-                this._currentStep = Math.floor(Math.random() * steps);
-                break;
+        // Comprobar si todos los pasos activos están en modo SKIP
+        const activeSteps = this._params.stepStates.slice(0, steps);
+        if (activeSteps.every(state => state === 2)) {
+            // Si todos son SKIP, no hacemos nada para evitar un bucle infinito.
+            return;
         }
+
+        let safetyCounter = 0;
+        do {
+            switch (this._params.direction) {
+                case 0: // FWD
+                    this._currentStep = (this._currentStep + 1) % steps;
+                    break;
+                case 1: // BWD
+                    this._currentStep = (this._currentStep - 1 + steps) % steps;
+                    break;
+                case 2: // P-P
+                    if (steps <= 1) {
+                        this._currentStep = 0;
+                    } else if (this._pingPongDirection === 1 && this._currentStep >= steps - 1) {
+                        this._pingPongDirection = -1;
+                        this._currentStep = Math.max(0, steps - 2);
+                    } else if (this._pingPongDirection === -1 && this._currentStep <= 0) {
+                        this._pingPongDirection = 1;
+                        this._currentStep = Math.min(1, steps - 1);
+                    } else {
+                        this._currentStep += this._pingPongDirection;
+                    }
+                    break;
+                case 3: // RND
+                    this._currentStep = Math.floor(Math.random() * steps);
+                    break;
+            }
+            safetyCounter++;
+        } while (this._params.stepStates[this._currentStep] === 2 && safetyCounter < steps * 2);
     }
 }
 
