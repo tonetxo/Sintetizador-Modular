@@ -20,12 +20,15 @@ export class Sequencer {
             stepStates: initialState.stepStates || Array(16).fill(0),
         };
         
-        this.cvNode = audioContext.createGain();
-        this.cvNode.gain.value = 0;
-        const cvSource = audioContext.createConstantSource();
-        cvSource.offset.value = 1.0;
-        cvSource.start();
-        cvSource.connect(this.cvNode);
+        this.cvNode = audioContext.createConstantSource();
+        this.cvNode.offset.value = 0;
+        this.cvNode.start();
+
+        // Workaround para mantener el nodo CV activo y evitar que sea eliminado por el recolector de basura
+        const dummyGain = audioContext.createGain();
+        dummyGain.gain.value = 0;
+        this.cvNode.connect(dummyGain);
+        dummyGain.connect(audioContext.destination);
         
         this.gateNode = audioContext.createConstantSource();
         this.gateNode.offset.value = 0;
@@ -71,7 +74,6 @@ export class Sequencer {
 
             const noteOnTime = now + 0.001;
 
-            // --- INICIO DE LA CORRECCIÓN FINAL ---
             const stepValue = this.params.sequence[this.currentStep]; // Valor del paso (0.0 a 1.0)
 
             // 1. Mapear el valor 0.0-1.0 a un rango de notas MIDI (ej: 4 octavas, de C2 a C6)
@@ -79,11 +81,12 @@ export class Sequencer {
             const maxMidiNote = 84; // C6
             const midiNote = minMidiNote + (stepValue * (maxMidiNote - minMidiNote));
             
-            // 2. Convertir esa nota MIDI a una frecuencia en Hercios (Hz)
-            const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
+            // 2. Convertir la nota MIDI a un valor de "voltaje" para 1V/Oct
+            // Usando C4 (MIDI 60) como 0V, igual que el teclado.
+            const voltage = (midiNote - 60) / 12;
 
-            // 3. Enviar la FRECUENCIA como señal de Tensión/CV
-            this.cvNode.gain.setTargetAtTime(freq, noteOnTime, 0.005);
+            // 3. Enviar el VOLTAJE como señal de Tensión/CV
+            this.cvNode.offset.setTargetAtTime(voltage, noteOnTime, 0.005);
             // --- FIN DE LA CORRECCIÓN FINAL ---
             
             this.gateNode.offset.setTargetAtTime(1.0, noteOnTime, 0.002);
@@ -106,8 +109,9 @@ export class Sequencer {
                     if (audioContext.state === 'suspended') audioContext.resume();
                     this.params.running = !this.params.running;
                     if (!this.params.running) {
-                        this.gateNode.offset.setTargetAtTime(0, audioContext.currentTime, 0.002);
-                        this.cvNode.gain.setTargetAtTime(0, audioContext.currentTime, 0.002);
+                        const now = audioContext.currentTime;
+                        this.gateNode.offset.cancelScheduledValues(now);
+                        this.gateNode.offset.setTargetAtTime(0, now, 0.02);
                         this.currentStep = 0;
                     }
                     this.updateWorkletState();
