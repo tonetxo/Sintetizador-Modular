@@ -10,29 +10,56 @@ export class VCF {
         this.height = 300; // Máis alto
         this.type = 'VCF';
 
+        this.bypassed = initialState.bypassed || false;
+
+        this.inputGain = audioContext.createGain();
+        this.bypassGain = audioContext.createGain();
+        this.outputGain = audioContext.createGain();
+
         this.filter = audioContext.createBiquadFilter();
         this.filter.type = 'lowpass';
         this.filter.frequency.setValueAtTime(1000, audioContext.currentTime);
         this.filter.Q.setValueAtTime(1, audioContext.currentTime);
+
+        this.inputGain.connect(this.filter);
+        this.filter.connect(this.outputGain);
+        this.bypassGain.connect(this.outputGain);
+
+        this.updateBypassState();
         
         this.activeControl = null;
         this.paramHotspots = {};
 
         this.inputs = {
-            'audio': { x: 0, y: this.height / 2, type: 'audio', target: this.filter, orientation: 'horizontal' },
+            'audio': { x: 0, y: this.height / 2, type: 'audio', target: [this.inputGain, this.bypassGain], orientation: 'horizontal' },
             'CV 1': { x: this.width / 2 - 40, y: this.height, type: 'cv', target: this.filter.frequency, orientation: 'vertical' },
             'CV 2': { x: this.width / 2 + 40, y: this.height, type: 'cv', target: this.filter.frequency, orientation: 'vertical' }
         };
         this.outputs = {
-            'audio': { x: this.width, y: this.height / 2, type: 'audio', source: this.filter, orientation: 'horizontal' }
+            'audio': { x: this.width, y: this.height / 2, type: 'audio', source: this.outputGain, orientation: 'horizontal' }
         };
+    }
+
+    toggleBypass() {
+        this.bypassed = !this.bypassed;
+        this.updateBypassState();
+    }
+
+    updateBypassState() {
+        if (this.bypassed) {
+            this.inputGain.gain.setValueAtTime(0, audioContext.currentTime);
+            this.bypassGain.gain.setValueAtTime(1, audioContext.currentTime);
+        } else {
+            this.inputGain.gain.setValueAtTime(1, audioContext.currentTime);
+            this.bypassGain.gain.setValueAtTime(0, audioContext.currentTime);
+        }
     }
 
     draw(ctx, isSelected, hoveredConnectorInfo) {
         ctx.save();
         ctx.translate(this.x, this.y);
 
-        ctx.fillStyle = '#222';
+        ctx.fillStyle = this.bypassed ? '#555' : '#222';
         ctx.strokeStyle = isSelected ? '#aaffff' : '#E0E0E0';
         ctx.lineWidth = 2;
         ctx.fillRect(0, 0, this.width, this.height);
@@ -226,7 +253,8 @@ export class VCF {
             x: this.x, y: this.y,
             cutoff: this.filter.frequency.value,
             resonance: this.filter.Q.value,
-            filterType: this.filter.type
+            filterType: this.filter.type,
+            bypassed: this.bypassed
         };
     }
 
@@ -236,5 +264,7 @@ export class VCF {
         this.filter.frequency.setValueAtTime(state.cutoff, audioContext.currentTime);
         this.filter.Q.setValueAtTime(state.resonance, audioContext.currentTime);
         this.filter.type = state.filterType;
+        this.bypassed = state.bypassed || false;
+        this.updateBypassState();
     }
 }

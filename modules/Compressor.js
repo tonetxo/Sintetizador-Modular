@@ -1,4 +1,3 @@
-
 import { audioContext } from './AudioContext.js';
 
 export class Compressor {
@@ -10,7 +9,19 @@ export class Compressor {
         this.height = 300;
         this.type = 'Compressor';
 
+        this.bypassed = initialState.bypassed || false;
+
+        this.inputGain = audioContext.createGain();
+        this.bypassGain = audioContext.createGain();
+        this.outputGain = audioContext.createGain();
+
         this.compressor = audioContext.createDynamicsCompressor();
+
+        this.inputGain.connect(this.compressor);
+        this.compressor.connect(this.outputGain);
+        this.bypassGain.connect(this.outputGain);
+
+        this.updateBypassState();
         
         this.params = {
             threshold: initialState.threshold || -24,
@@ -28,18 +39,33 @@ export class Compressor {
         this.paramHotspots = {};
 
         this.inputs = {
-            'audio': { x: 0, y: this.height / 2, type: 'audio', target: this.compressor, orientation: 'horizontal' }
+            'audio': { x: 0, y: this.height / 2, type: 'audio', target: [this.inputGain, this.bypassGain], orientation: 'horizontal' }
         };
         this.outputs = {
-            'audio': { x: this.width, y: this.height / 2, type: 'audio', source: this.compressor, orientation: 'horizontal' }
+            'audio': { x: this.width, y: this.height / 2, type: 'audio', source: this.outputGain, orientation: 'horizontal' }
         };
+    }
+
+    toggleBypass() {
+        this.bypassed = !this.bypassed;
+        this.updateBypassState();
+    }
+
+    updateBypassState() {
+        if (this.bypassed) {
+            this.inputGain.gain.setValueAtTime(0, audioContext.currentTime);
+            this.bypassGain.gain.setValueAtTime(1, audioContext.currentTime);
+        } else {
+            this.inputGain.gain.setValueAtTime(1, audioContext.currentTime);
+            this.bypassGain.gain.setValueAtTime(0, audioContext.currentTime);
+        }
     }
 
     draw(ctx, isSelected, hoveredConnectorInfo) {
         ctx.save();
         ctx.translate(this.x, this.y);
 
-        ctx.fillStyle = '#222';
+        ctx.fillStyle = this.bypassed ? '#555' : '#222';
         ctx.strokeStyle = isSelected ? '#aaffff' : '#E0E0E0';
         ctx.lineWidth = 2;
         ctx.fillRect(0, 0, this.width, this.height);
@@ -173,7 +199,8 @@ export class Compressor {
             threshold: this.params.threshold,
             ratio: this.params.ratio,
             attack: this.params.attack,
-            release: this.params.release
+            release: this.params.release,
+            bypassed: this.bypassed
         };
     }
 
@@ -184,10 +211,13 @@ export class Compressor {
         this.params.ratio = state.ratio;
         this.params.attack = state.attack;
         this.params.release = state.release;
+        this.bypassed = state.bypassed || false;
         
         this.compressor.threshold.setValueAtTime(this.params.threshold, audioContext.currentTime);
         this.compressor.ratio.setValueAtTime(this.params.ratio, audioContext.currentTime);
         this.compressor.attack.setValueAtTime(this.params.attack, audioContext.currentTime);
         this.compressor.release.setValueAtTime(this.params.release, audioContext.currentTime);
+
+        this.updateBypassState();
     }
 }

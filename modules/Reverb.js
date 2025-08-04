@@ -10,6 +10,8 @@ export class Reverb {
         this.height = 220;
         this.type = 'Reverb';
 
+        this.bypassed = initialState.bypassed || false;
+
         this.params = {
             mix: initialState.mix || 0.5,
             decay: initialState.decay || 2.0, // en segundos
@@ -58,15 +60,25 @@ export class Reverb {
     }
 
     updateParams() {
+        if (this.bypassed) {
+            this.dryGain.gain.setValueAtTime(1, audioContext.currentTime);
+            this.wetGain.gain.setValueAtTime(0, audioContext.currentTime);
+            return;
+        }
         this.dryGain.gain.setValueAtTime(1 - this.params.mix, audioContext.currentTime);
         this.wetGain.gain.setValueAtTime(this.params.mix, audioContext.currentTime);
+    }
+
+    toggleBypass() {
+        this.bypassed = !this.bypassed;
+        this.updateParams();
     }
 
     draw(ctx, isSelected, hoveredConnectorInfo) {
         ctx.save();
         ctx.translate(this.x, this.y);
 
-        ctx.fillStyle = '#222';
+        ctx.fillStyle = this.bypassed ? '#555' : '#222';
         ctx.strokeStyle = isSelected ? '#aaffff' : '#E0E0E0';
         ctx.lineWidth = 2;
         ctx.fillRect(0, 0, this.width, this.height);
@@ -204,7 +216,8 @@ export class Reverb {
         return {
             id: this.id, type: 'Reverb', x: this.x, y: this.y,
             mix: this.params.mix,
-            decay: this.params.decay
+            decay: this.params.decay,
+            bypassed: this.bypassed
         };
     }
 
@@ -213,6 +226,7 @@ export class Reverb {
         this.x = state.x; this.y = state.y;
         this.params.mix = state.mix;
         this.params.decay = state.decay;
+        this.bypassed = state.bypassed || false;
         this._createImpulseResponse();
         this.updateParams();
     }

@@ -10,6 +10,8 @@ export class Delay {
         this.height = 280;
         this.type = 'Delay';
 
+        this.bypassed = initialState.bypassed || false;
+
         this.params = {
             time: initialState.time || 0.5,
             feedback: initialState.feedback || 0.5,
@@ -46,17 +48,27 @@ export class Delay {
     }
 
     updateParams() {
+        if (this.bypassed) {
+            this.dryGain.gain.setValueAtTime(1, audioContext.currentTime);
+            this.wetGain.gain.setValueAtTime(0, audioContext.currentTime);
+            return;
+        }
         this.delayNode.delayTime.setValueAtTime(this.params.time, audioContext.currentTime);
         this.feedbackNode.gain.setValueAtTime(this.params.feedback, audioContext.currentTime);
         this.dryGain.gain.setValueAtTime(1 - this.params.mix, audioContext.currentTime);
         this.wetGain.gain.setValueAtTime(this.params.mix, audioContext.currentTime);
     }
 
+    toggleBypass() {
+        this.bypassed = !this.bypassed;
+        this.updateParams();
+    }
+
     draw(ctx, isSelected, hoveredConnectorInfo) {
         ctx.save();
         ctx.translate(this.x, this.y);
 
-        ctx.fillStyle = '#222';
+        ctx.fillStyle = this.bypassed ? '#555' : '#222';
         ctx.strokeStyle = isSelected ? '#aaffff' : '#E0E0E0';
         ctx.lineWidth = 2;
         ctx.fillRect(0, 0, this.width, this.height);
@@ -193,7 +205,8 @@ export class Delay {
             id: this.id, type: 'Delay', x: this.x, y: this.y,
             time: this.params.time,
             feedback: this.params.feedback,
-            mix: this.params.mix
+            mix: this.params.mix,
+            bypassed: this.bypassed
         };
     }
 
@@ -203,6 +216,7 @@ export class Delay {
         this.params.time = state.time;
         this.params.feedback = state.feedback;
         this.params.mix = state.mix;
+        this.bypassed = state.bypassed || false;
         this.updateParams();
     }
 }

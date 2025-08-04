@@ -822,6 +822,18 @@ function showModuleContextMenu(module, x, y) {
         });
         patchContextMenu.appendChild(deleteItem);
     }
+
+    // Add "Bypass" option
+    const bypassItem = document.createElement('div');
+    bypassItem.className = 'context-menu-item';
+    bypassItem.textContent = module.bypassed ? 'Activar Módulo' : 'Bypass Módulo';
+    bypassItem.addEventListener('click', () => {
+        if (typeof module.toggleBypass === 'function') {
+            module.toggleBypass();
+        }
+        patchContextMenu.style.display = 'none';
+    });
+    patchContextMenu.appendChild(bypassItem);
 }
 
 function onKeyDown(e) {
