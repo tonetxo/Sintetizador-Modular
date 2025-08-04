@@ -21,10 +21,10 @@
       "type": "VCO",
       "x": 269,
       "y": 186,
-      "frequency": 743.4589214282419,
+      "frequency": 439.99999999999983,
       "detune": 12.5,
-      "waveform": "sine",
-      "pulseWidth": 0.653125
+      "waveform": "square",
+      "pulseWidth": 0.49234374999999997
     },
     {
       "id": "vca-1754196840250",
@@ -35,12 +35,12 @@
     {
       "id": "adsr-1754196846386",
       "type": "ADSR",
-      "x": 511,
+      "x": 599,
       "y": 336,
-      "attack": 0.01,
-      "decay": 0.6650416666666666,
-      "sustain": 0.1625,
-      "release": 0.88325
+      "attack": 0.6484583333333334,
+      "decay": 1.7015,
+      "sustain": 0.75,
+      "release": 1.3406666666666667
     },
     {
       "id": "vcf-1754281279656",
@@ -71,27 +71,12 @@
     {
       "id": "compressor-1754281368296",
       "type": "Compressor",
-      "x": 1044,
-      "y": 339,
+      "x": 1040,
+      "y": 321,
       "threshold": -24,
       "ratio": 12,
       "attack": 0.003,
       "release": 0.25
-    },
-    {
-      "id": "ringmod-1754281593824",
-      "type": "RingMod",
-      "x": 319,
-      "y": 184
-    },
-    {
-      "id": "lfo-1754282717449",
-      "type": "LFO",
-      "x": 312,
-      "y": 393,
-      "rate": 20,
-      "depth": 38.311866760253906,
-      "waveform": "sine"
     }
   ],
   "connections": [
@@ -112,6 +97,12 @@
       "fromConnector": "CV",
       "toId": "vca-1754196840250",
       "toConnector": "CV 1"
+    },
+    {
+      "fromId": "vco-1754196834506",
+      "fromConnector": "Out",
+      "toId": "vca-1754196840250",
+      "toConnector": "audio"
     },
     {
       "fromId": "vca-1754196840250",
@@ -141,24 +132,6 @@
       "fromId": "compressor-1754281368296",
       "fromConnector": "audio",
       "toId": "output-main",
-      "toConnector": "audio"
-    },
-    {
-      "fromId": "lfo-1754282717449",
-      "fromConnector": "SALIDA",
-      "toId": "ringmod-1754281593824",
-      "toConnector": "Mod"
-    },
-    {
-      "fromId": "vco-1754196834506",
-      "fromConnector": "Out",
-      "toId": "ringmod-1754281593824",
-      "toConnector": "In"
-    },
-    {
-      "fromId": "ringmod-1754281593824",
-      "fromConnector": "Out",
-      "toId": "vca-1754196840250",
       "toConnector": "audio"
     }
   ]

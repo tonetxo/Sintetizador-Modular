@@ -1,0 +1,166 @@
+{
+  "modules": [
+    {
+      "id": "keyboard-main",
+      "type": "Keyboard",
+      "x": 334.5,
+      "y": 732,
+      "isPermanent": true,
+      "portamentoValue": 0.17307692307692307,
+      "octave": 4
+    },
+    {
+      "id": "output-main",
+      "type": "Output",
+      "x": 857.5,
+      "y": 123,
+      "isPermanent": true
+    },
+    {
+      "id": "vco-1754196834506",
+      "type": "VCO",
+      "x": 269,
+      "y": 186,
+      "frequency": 440,
+      "detune": 0,
+      "waveform": "triangle",
+      "pulseWidth": 0.5
+    },
+    {
+      "id": "vca-1754196840250",
+      "type": "VCA",
+      "x": 656,
+      "y": 111
+    },
+    {
+      "id": "adsr-1754196846386",
+      "type": "ADSR",
+      "x": 553,
+      "y": 380.99999999999994,
+      "attack": 0.38007533967689144,
+      "decay": 1.6155336730102243,
+      "sustain": 0.8776341740419887,
+      "release": 1.3406666666666667
+    },
+    {
+      "id": "sequencer-1754234314246",
+      "type": "Sequencer",
+      "x": -458.0620413296517,
+      "y": 193.36779822992276,
+      "tempo": 85,
+      "direction": 0,
+      "numberOfSteps": 16,
+      "running": false,
+      "sequence": [
+        0.5,
+        0.3250000000000005,
+        0.5,
+        0.5,
+        0.6937500000000002,
+        0.5,
+        0.5,
+        0.6687500000000002,
+        0.5,
+        0.35000000000000053,
+        0.5,
+        0.15000000000000052,
+        0.5,
+        0.8437500000000002,
+        0.5,
+        0.5
+      ],
+      "gateLengths": [
+        0.8,
+        0.8,
+        0.27400000000000185,
+        0.8,
+        0.7690000000000013,
+        0.8,
+        0.8,
+        0.8,
+        0.8,
+        0.48850000000000143,
+        0.8,
+        0.8,
+        0.8,
+        0.8,
+        0.8,
+        0.8
+      ],
+      "stepStates": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "osc-1754234417196",
+      "type": "Osciloscopio",
+      "x": 64.93795867034802,
+      "y": 671.3677982299225
+    },
+    {
+      "id": "osc-1754234433236",
+      "type": "Osciloscopio",
+      "x": -214.06204132965183,
+      "y": 678.3677982299225
+    }
+  ],
+  "connections": [
+    {
+      "fromId": "vca-1754196840250",
+      "fromConnector": "audio",
+      "toId": "output-main",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "vco-1754196834506",
+      "fromConnector": "Out",
+      "toId": "vca-1754196840250",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "sequencer-1754234314246",
+      "fromConnector": "TENSION",
+      "toId": "vco-1754196834506",
+      "toConnector": "1v/oct"
+    },
+    {
+      "fromId": "sequencer-1754234314246",
+      "fromConnector": "DISPARO",
+      "toId": "adsr-1754196846386",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "adsr-1754196846386",
+      "fromConnector": "CV",
+      "toId": "vca-1754196840250",
+      "toConnector": "CV 1"
+    },
+    {
+      "fromId": "sequencer-1754234314246",
+      "fromConnector": "DISPARO",
+      "toId": "osc-1754234417196",
+      "toConnector": "input"
+    },
+    {
+      "fromId": "sequencer-1754234314246",
+      "fromConnector": "TENSION",
+      "toId": "osc-1754234433236",
+      "toConnector": "input"
+    }
+  ]
+}

@@ -20,6 +20,7 @@ import { Microphone } from './modules/Microphone.js';
 import { AudioPlayer } from './modules/AudioPlayer.js';
 import { Vocoder } from './modules/Vocoder.js';
 import { MathModule } from './modules/Math.js';
+import { NoiseGenerator } from './modules/NoiseGenerator.js';
 
 // DOM Elements
 const canvas = document.getElementById('synth-canvas');
@@ -34,7 +35,7 @@ const MODULE_CLASSES = {
   VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod,
   SampleAndHold, Sequencer, Osciloscopio, Delay,
   Compressor, Reverb, Keyboard, Math: MathModule,
-  Microphone, AudioPlayer, Vocoder
+  Microphone, AudioPlayer, Vocoder, NoiseGenerator
 };
 
 let modules = [];
@@ -211,6 +212,8 @@ function getConnectorPosition(module, connector) {
     y: module.y + connector.y
   };
 }
+
+// Audio Connection Functions
 
 // Audio Connection Functions
 function connectNodes(sourceConnector, destConnector) {
@@ -861,7 +864,8 @@ async function setup() {
         loadWorklet('Vocoder', './worklets/vocoder-processor.js'),
         loadWorklet('Math', './worklets/math-processor.js'),
         loadWorklet('RingMod', './worklets/ring-mod-processor.js'),
-        loadWorklet('SampleAndHold', './worklets/sample-and-hold-processor.js')
+        loadWorklet('SampleAndHold', './worklets/sample-and-hold-processor.js'),
+        loadWorklet('NoiseGenerator', './worklets/noise-generator-processor.js')
       ]);
     } catch (error) {
       console.error('Error initializing audio:', error);
