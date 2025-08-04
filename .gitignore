@@ -1,5 +1,6 @@
 *.log
 *.png
+!assets/pantalla.png
 *.jpg
 *.jpeg
 *.gif

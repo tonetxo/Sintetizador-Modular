@@ -51,6 +51,8 @@ let isPanning = false;
 let lastMousePos = { x: 0, y: 0 };
 let mousePos = { x: 0, y: 0 };
 let hoveredConnectorInfo = null;
+let analyser = null;
+let dataArray = null;
 
 // View settings
 const view = { x: 0, y: 0, zoom: 1, minZoom: 0.2, maxZoom: 2.0 };
@@ -118,6 +120,7 @@ function draw() {
     drawActivePatch();
   }
   drawModules();
+  drawAudioVisualization();
 
   ctx.restore();
   requestAnimationFrame(draw);
@@ -194,6 +197,31 @@ function drawModules() {
     module.draw(ctx, selectedModules.includes(module), hoveredConnectorInfo);
     updateModuleUI(module);
   });
+}
+
+function drawAudioVisualization() {
+  if (!analyser || !dataArray) return;
+
+  analyser.getByteFrequencyData(dataArray);
+
+  // Clear a portion of the canvas for the visualization
+  // For now, let's draw it at the top of the screen, outside the module area
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for visualization
+  ctx.clearRect(0, 0, canvas.width, 100); // Clear top 100 pixels
+
+  const barWidth = (canvas.width / dataArray.length) * 2.5;
+  let x = 0;
+
+  for (let i = 0; i < dataArray.length; i++) {
+    const barHeight = dataArray[i];
+
+    ctx.fillStyle = `rgb(${barHeight + 100}, 50, 50)`;
+    ctx.fillRect(x, 100 - barHeight / 2, barWidth, barHeight / 2);
+
+    x += barWidth + 1;
+  }
+  ctx.restore();
 }
 
 function updateModuleUI(module) {
@@ -896,6 +924,11 @@ async function setup() {
     try {
       await initAudioContext();
 
+      // Initialize AnalyserNode
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048; // You can adjust this value
+      dataArray = new Uint8Array(analyser.frequencyBinCount);
+
       // Load essential worklets
       await Promise.all([
         loadWorklet('ADSR', './worklets/adsr-processor.js'),
@@ -926,7 +959,7 @@ async function setup() {
         'audio': {
           x: 0, y: 40, // Centrado verticalmente a la izquierda
           type: 'audio',
-          get target() { return audioContext.destination; }, // Dynamic getter
+          get target() { return analyser; }, // Dynamic getter
           orientation: 'horizontal' // Cambiado para que la línea salga hacia la derecha
         }
       },
@@ -991,6 +1024,9 @@ async function setup() {
       }
     };
     modules.push(outputModule);
+
+    // Connect analyser to destination
+    analyser.connect(audioContext.destination);
 
     // Set up event listeners
     setupEventListeners();
