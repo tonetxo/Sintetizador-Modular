@@ -487,7 +487,7 @@ function getModuleAndConnectorAt(x, y) {
 }
 
 function getConnectionAt(x, y) {
-  const threshold = 10 / view.zoom;
+  const threshold = 15 / view.zoom;
 
   for (const conn of connections) {
     try {

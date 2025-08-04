@@ -21,6 +21,7 @@ export class VCO {
 
         this.activeControl = null;
         this.hotspots = {};
+        this.deadzone = 5; // Pixels
 
         this.readyPromise = this.initWorklet(initialState);
     }
@@ -38,6 +39,8 @@ export class VCO {
             // Estas son las entradas reales para la modulación desde otros módulos
             this.vOctInNode = this.workletNode.parameters.get('vOct');
             this.pwmInNode = this.workletNode.parameters.get('pwm');
+            this.fm1InNode = this.workletNode.parameters.get('fm1');
+            this.fm2InNode = this.workletNode.parameters.get('fm2');
 
             this.output = audioContext.createGain();
             this.workletNode.connect(this.output);
@@ -84,10 +87,28 @@ export class VCO {
     }
 
     get inputs() {
-        return {
-            '1v/oct': { x: 0, y: this.height / 2 - 30, type: 'cv', target: this.vOctInNode, orientation: 'horizontal' },
-            'PWM': { x: 0, y: this.height / 2 + 30, type: 'cv', target: this.pwmInNode, orientation: 'horizontal' },
-        };
+        const inputPositions = [
+            { name: '1v/oct', y: this.height / 2 - 60, type: 'cv', target: this.vOctInNode },
+            { name: 'FM1', y: this.height / 2 - 20, type: 'cv', target: this.fm1InNode },
+            { name: 'FM2', y: this.height / 2 + 20, type: 'cv', target: this.fm2InNode },
+            { name: 'PWM', y: this.height / 2 + 60, type: 'cv', target: this.pwmInNode }
+        ];
+
+        const availableInputs = {};
+        inputPositions.forEach(input => {
+            if (input.name === 'PWM' && this.params.waveform !== 'square') {
+                // No añadir PWM si no es onda cuadrada
+            } else {
+                availableInputs[input.name] = {
+                    x: 0,
+                    y: input.y,
+                    type: input.type,
+                    target: input.target,
+                    orientation: 'horizontal'
+                };
+            }
+        });
+        return availableInputs;
     }
 
     get outputs() {
@@ -110,11 +131,11 @@ export class VCO {
         ctx.textAlign = 'center';
         ctx.fillText('VCO', this.width / 2, 22);
 
-        this.drawKnob(ctx, 'frequency', 'FREQ', this.width / 2, 80, 20, 5000, this.params.frequency);
-        this.drawKnob(ctx, 'detune', 'FINE', this.width / 2, 170, -100, 100, this.params.detune);
+        this.drawKnob(ctx, 'frequency', 'FREQ', this.width / 2, 80, 20, 5000, this.params.frequency, this.activeControl === 'frequency');
+        this.drawKnob(ctx, 'detune', 'FINE', this.width / 2, 170, -100, 100, this.params.detune, this.activeControl === 'detune');
         
         if (this.params.waveform === 'square') {
-            this.drawKnob(ctx, 'pulseWidth', 'PW', this.width / 2, 260, 0.01, 0.99, this.params.pulseWidth);
+            this.drawKnob(ctx, 'pulseWidth', 'PW', this.width / 2, 260, 0.01, 0.99, this.params.pulseWidth, this.activeControl === 'pulseWidth');
         }
         
         this.drawSelector(ctx, 'waveform', 'WAVE', this.width / 2, 350, 100, 30, this.params.waveform);
@@ -123,7 +144,7 @@ export class VCO {
         ctx.restore();
     }
     
-    drawKnob(ctx, paramName, label, x, y, min, max, value) {
+    drawKnob(ctx, paramName, label, x, y, min, max, value, isActive) {
         const knobRadius = 22;
         const angleRange = Math.PI * 1.5;
         const startAngle = Math.PI * 0.75;
@@ -132,6 +153,15 @@ export class VCO {
             normalizedValue = (Math.log(value) - Math.log(min)) / (Math.log(max) - Math.log(min));
         }
         const angle = startAngle + normalizedValue * angleRange;
+        
+        // Visual feedback for active knob
+        if (isActive) {
+            ctx.beginPath();
+            ctx.arc(x, y, knobRadius + 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(74, 144, 226, 0.5)';
+            ctx.fill();
+        }
+
         ctx.font = '10px Arial'; ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'center';
         ctx.fillText(label, x, y - knobRadius - 5);
         const displayValue = paramName === 'frequency' ? `${value.toFixed(1)} Hz` : (paramName === 'pulseWidth' ? `${(value * 100).toFixed(0)}%` : `${value.toFixed(0)}c`);
@@ -194,7 +224,8 @@ export class VCO {
         for (const [name, spot] of Object.entries(this.hotspots)) {
             if (this.isInside(localPos, spot) && spot.type === 'knob') {
                 this.activeControl = name;
-                this.dragStart = { y: localPos.y, value: this.params[name] };
+                this.dragStartY = localPos.y; // Store initial Y position
+                this.dragInitiated = false;
                 return true;
             }
         }
@@ -215,24 +246,45 @@ export class VCO {
 
     endInteraction() {
         this.activeControl = null;
+        this.dragStart = null;
     }
 
     handleDragInteraction(worldPos) {
         if (!this.activeControl) return;
-        const hotspot = this.hotspots[this.activeControl];
+
         const localY = worldPos.y - this.y;
-        const dy = this.dragStart.y - localY;
-        let newValue;
-        if (this.activeControl === 'frequency') {
-            const logRange = Math.log(hotspot.max) - Math.log(hotspot.min);
-            const currentNorm = (Math.log(this.dragStart.value) - Math.log(hotspot.min)) / logRange;
-            const newNorm = Math.max(0, Math.min(1, currentNorm + dy * 0.005));
-            newValue = Math.exp(Math.log(hotspot.min) + newNorm * logRange);
+
+        if (!this.dragStart) {
+            // First movement after click
+            const dy = Math.abs(localY - this.dragStartY);
+            if (dy > this.deadzone) {
+                // Exited deadzone, start the drag
+                this.dragStart = {
+                    y: localY,
+                    value: this.params[this.activeControl]
+                };
+            } else {
+                return; // Still in deadzone
+            }
         } else {
-            newValue = this.dragStart.value + dy * ((hotspot.max - hotspot.min) / 128);
+            // Already dragging
+            const hotspot = this.hotspots[this.activeControl];
+            const dy = this.dragStart.y - localY;
+            let newValue;
+
+            if (this.activeControl === 'frequency') {
+                const logRange = Math.log(hotspot.max) - Math.log(hotspot.min);
+                const currentNorm = (Math.log(this.dragStart.value) - Math.log(hotspot.min)) / logRange;
+                const newNorm = Math.max(0, Math.min(1, currentNorm + dy * 0.005));
+                newValue = Math.exp(Math.log(hotspot.min) + newNorm * logRange);
+            } else {
+                const sensitivity = (hotspot.max - hotspot.min) / 128;
+                newValue = this.dragStart.value + dy * sensitivity;
+            }
+            
+            this.params[this.activeControl] = Math.max(hotspot.min, Math.min(hotspot.max, newValue));
+            this.updateParams();
         }
-        this.params[this.activeControl] = Math.max(hotspot.min, Math.min(hotspot.max, newValue));
-        this.updateParams();
     }
 
     getConnectorAt(x, y) {
