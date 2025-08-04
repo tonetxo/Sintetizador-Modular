@@ -40,7 +40,7 @@ const MODULE_CLASSES = {
 
 let modules = [];
 let connections = [];
-let selectedModule = null;
+let selectedModules = [];
 let selectedConnection = null;
 let draggingModule = null;
 let interactingModule = null;
@@ -191,7 +191,7 @@ function drawActivePatch() {
 
 function drawModules() {
   modules.forEach(module => {
-    module.draw(ctx, module === selectedModule, hoveredConnectorInfo);
+    module.draw(ctx, selectedModules.includes(module), hoveredConnectorInfo);
     updateModuleUI(module);
   });
 }
@@ -280,36 +280,41 @@ function disconnectNodes(sourceConnector, destConnector) {
 
 // Patch Management Functions
 function deleteSelection() {
-  if (selectedConnection) {
-    const conn = selectedConnection;
-    if (conn.fromConnector.props.source && conn.toConnector.props.target) {
-      disconnectNodes(conn.fromConnector.props, conn.toConnector.props);
-    }
-    connections = connections.filter(c => c !== conn);
-    selectedConnection = null;
-  } else if (selectedModule && !selectedModule.isPermanent) {
-    connections = connections.filter(conn => {
-      const shouldRemove = conn.fromModule === selectedModule || conn.toModule === selectedModule;
-      if (shouldRemove) {
+    if (selectedConnection) {
+        const conn = selectedConnection;
         if (conn.fromConnector.props.source && conn.toConnector.props.target) {
-          disconnectNodes(conn.fromConnector.props, conn.toConnector.props);
+            disconnectNodes(conn.fromConnector.props, conn.toConnector.props);
         }
-      }
-      return !shouldRemove;
-    });
+        connections = connections.filter(c => c !== conn);
+        selectedConnection = null;
+    } else if (selectedModules.length > 0) {
+        const modulesToDelete = [...selectedModules];
+        modulesToDelete.forEach(selectedModule => {
+            if (selectedModule && !selectedModule.isPermanent) {
+                connections = connections.filter(conn => {
+                    const shouldRemove = conn.fromModule === selectedModule || conn.toModule === selectedModule;
+                    if (shouldRemove) {
+                        if (conn.fromConnector.props.source && conn.toConnector.props.target) {
+                            disconnectNodes(conn.fromConnector.props, conn.toConnector.props);
+                        }
+                    }
+                    return !shouldRemove;
+                });
 
-    try {
-      selectedModule.disconnect?.();
-    } catch (disconnectError) {
-      console.error("Error disconnecting module:", disconnectError);
-    }
+                try {
+                    selectedModule.disconnect?.();
+                } catch (disconnectError) {
+                    console.error("Error disconnecting module:", disconnectError);
+                }
 
-    if (selectedModule.ui) {
-      selectedModule.ui.remove();
+                if (selectedModule.ui) {
+                    selectedModule.ui.remove();
+                }
+                modules = modules.filter(m => m !== selectedModule);
+            }
+        });
+        selectedModules = [];
     }
-    modules = modules.filter(m => m !== selectedModule);
-    selectedModule = null;
-  }
 }
 
 async function savePatch() {
@@ -377,7 +382,7 @@ async function reconstructPatch(patchData) {
 
     modules = modules.filter(m => m.isPermanent);
     connections = [];
-    selectedModule = null;
+    selectedModules = [];
     selectedConnection = null;
 
     // Load new modules
@@ -528,7 +533,7 @@ async function addModule(type, x, y) {
       });
     }
     modules.push(newModule);
-    selectedModule = newModule;
+    selectedModules = [newModule];
 
     if (type === 'AudioPlayer') {
       createAudioPlayerUI(newModule);
@@ -638,7 +643,21 @@ function onMouseDown(e) {
 
       const moduleHit = getModuleAt(worldPos.x, worldPos.y);
       if (moduleHit) {
-        selectedModule = moduleHit;
+        const isSelected = selectedModules.includes(moduleHit);
+
+        if (e.ctrlKey || e.metaKey) {
+          if (isSelected) {
+            selectedModules.splice(selectedModules.indexOf(moduleHit), 1); // deselect
+          } else {
+            selectedModules.push(moduleHit); // select
+          }
+        } else {
+          if (!isSelected) {
+            selectedModules = [moduleHit];
+          }
+          // If it is selected, we don't change the selection, allowing for drag.
+        }
+
         selectedConnection = null;
 
         if (moduleHit.handleMouseDown?.(worldPos.x, worldPos.y)) {
@@ -656,7 +675,7 @@ function onMouseDown(e) {
           return;
         }
 
-        draggingModule = moduleHit;
+        draggingModule = moduleHit; // This is the module we are holding
         dragOffset.x = worldPos.x - moduleHit.x;
         dragOffset.y = worldPos.y - moduleHit.y;
         return;
@@ -665,11 +684,11 @@ function onMouseDown(e) {
       const connectionHit = getConnectionAt(worldPos.x, worldPos.y);
       if (connectionHit) {
         selectedConnection = connectionHit;
-        selectedModule = null;
+        selectedModules = [];
         return;
       }
 
-      selectedModule = null;
+      selectedModules = [];
       selectedConnection = null;
       isPanning = true;
       lastMousePos = mousePos;
@@ -693,8 +712,18 @@ function onMouseMove(e) {
     if (interactingModule?.handleMouseDrag?.(worldPos.x, worldPos.y)) {
       // El módulo está manejando el arrastre
     } else if (draggingModule) {
-      draggingModule.x = worldPos.x - dragOffset.x;
-      draggingModule.y = worldPos.y - dragOffset.y;
+      const dx = (worldPos.x - dragOffset.x) - draggingModule.x;
+      const dy = (worldPos.y - dragOffset.y) - draggingModule.y;
+
+      if (selectedModules.includes(draggingModule)) {
+        selectedModules.forEach(m => {
+            m.x += dx;
+            m.y += dy;
+        });
+      } else {
+        draggingModule.x += dx;
+        draggingModule.y += dy;
+      }
     } else if (interactingModule?.handleDragInteraction) {
       interactingModule.handleDragInteraction(worldPos);
     } else if (isPanning) {
@@ -787,7 +816,7 @@ function showModuleContextMenu(module, x, y) {
         deleteItem.className = 'context-menu-item';
         deleteItem.textContent = 'Eliminar Módulo';
         deleteItem.addEventListener('click', () => {
-            selectedModule = module; // Select the module to be deleted
+            selectedModules = [module]; // Select the module to be deleted
             deleteSelection();
             patchContextMenu.style.display = 'none';
         });
