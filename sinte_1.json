@@ -47,9 +47,10 @@
       "type": "VCF",
       "x": 779,
       "y": -15,
-      "cutoff": 1727.40283203125,
-      "resonance": 22.227272033691406,
-      "filterType": "lowpass"
+      "cutoff": 1000,
+      "resonance": 1,
+      "filterType": "lowpass",
+      "bypassed": false
     },
     {
       "id": "delay-1754281355216",
@@ -58,7 +59,8 @@
       "y": -5,
       "time": 0.5,
       "feedback": 0.20727272727272725,
-      "mix": 0.18636363636363637
+      "mix": 0.18636363636363637,
+      "bypassed": false
     },
     {
       "id": "reverb-1754281360416",
@@ -66,7 +68,8 @@
       "x": 1273,
       "y": 24,
       "mix": 0.5,
-      "decay": 2
+      "decay": 2,
+      "bypassed": false
     },
     {
       "id": "compressor-1754281368296",
@@ -76,7 +79,19 @@
       "threshold": -24,
       "ratio": 12,
       "attack": 0.003,
-      "release": 0.25
+      "release": 0.25,
+      "bypassed": false
+    },
+    {
+      "id": "lfo-1754369061909",
+      "type": "LFO",
+      "x": 50.84579338842957,
+      "y": 168.88631404958676,
+      "rate": 8,
+      "depth": 3,
+      "attack": 0.10000000149011612,
+      "waveform": "sine",
+      "isBypassed": false
     }
   ],
   "connections": [
@@ -133,6 +148,18 @@
       "fromConnector": "audio",
       "toId": "output-main",
       "toConnector": "audio"
+    },
+    {
+      "fromId": "lfo-1754369061909",
+      "fromConnector": "SALIDA",
+      "toId": "vco-1754196834506",
+      "toConnector": "FM1"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "lfo-1754369061909",
+      "toConnector": "Gate"
     }
   ]
 }

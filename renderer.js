@@ -951,7 +951,8 @@ async function setup() {
         loadWorklet('Math', './worklets/math-processor.js'),
         loadWorklet('RingMod', './worklets/ring-mod-processor.js'),
         loadWorklet('SampleAndHold', './worklets/sample-and-hold-processor.js'),
-        loadWorklet('NoiseGenerator', './worklets/noise-generator-processor.js')
+        loadWorklet('NoiseGenerator', './worklets/noise-generator-processor.js'),
+        loadWorklet('Gate', './worklets/gate-processor.js')
       ]);
     } catch (error) {
       console.error('Error initializing audio:', error);

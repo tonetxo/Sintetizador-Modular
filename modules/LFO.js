@@ -15,7 +15,6 @@ function createNoiseGenerator(audioCtx) {
     return noiseNode;
 }
 
-
 export class LFO {
     constructor(x, y, id = null, initialState = {}) {
         this.id = id || `lfo-${Date.now()}`;
@@ -25,43 +24,53 @@ export class LFO {
         this.height = 260;
         this.type = 'LFO';
 
+        this.initialState = initialState; 
+        this.readyPromise = this.init();
+    }
+
+    async init() {
         this.oscillator = audioContext.createOscillator();
         this.oscillator.frequency.setValueAtTime(8, audioContext.currentTime);
         
         this.noise = createNoiseGenerator(audioContext);
 
-        this.depth = audioContext.createGain();
-        this.depth.gain.value = 3;
+        this.lfoDepthGain = audioContext.createGain();
+        this.lfoDepthGain.gain.value = 3;
 
-        // --- Lógica de Gate/Ataque que funciona ---
-        this.dcOffset = audioContext.createConstantSource();
-        this.dcOffset.offset.value = 1.0;
-        this.dcOffset.start();
+        this.attackEnvelope = audioContext.createGain();
+        this.attackEnvelope.gain.value = 0;
 
-        this.gateReceiver = audioContext.createGain();
-        this.gateReceiver.gain.value = 0;
+        this.attackTimeConstant = this.initialState.attack || 0.1; 
+        
+        try {
+            this.gateProcessorNode = new AudioWorkletNode(audioContext, 'gate-processor');
+            this.gateProcessorNode.connect(audioContext.destination);
 
-        this.gateSmoother = audioContext.createBiquadFilter();
-        this.gateSmoother.type = 'lowpass';
-        this.gateSmoother.frequency.value = 1000;
-
-        this.gateGain = audioContext.createGain();
-        this.gateGain.gain.value = 0;
-
-        this.dcOffset.connect(this.gateReceiver);
-        this.gateReceiver.connect(this.gateSmoother);
-        this.gateSmoother.connect(this.gateGain.gain);
+            this.gateProcessorNode.port.onmessage = (event) => {
+                const now = audioContext.currentTime;
+                if (event.data === 'gate-on') {
+                    this.attackEnvelope.gain.cancelScheduledValues(now);
+                    this.attackEnvelope.gain.setTargetAtTime(1.0, now, this.attackTimeConstant);
+                } else if (event.data === 'gate-off') {
+                    this.attackEnvelope.gain.cancelScheduledValues(now);
+                    this.attackEnvelope.gain.setTargetAtTime(0.0, now, 0.01);
+                }
+            };
+        } catch (e) {
+            console.error('Error al crear el worklet de gate para el LFO:', e);
+        }
 
         this.outputScaler = audioContext.createGain();
         this.outputScaler.gain.value = 0.04;
 
-        this.isBypassed = initialState.isBypassed || false;
+        this.isBypassed = this.initialState.isBypassed || false;
         this.bypassNode = audioContext.createGain();
         this.bypassNode.gain.value = this.isBypassed ? 0 : 1;
 
-        this.oscillator.connect(this.depth);
-        this.depth.connect(this.gateGain);
-        this.gateGain.connect(this.outputScaler);
+        this.oscillator.connect(this.lfoDepthGain);
+        this.noise.connect(this.lfoDepthGain);
+        this.lfoDepthGain.connect(this.attackEnvelope);
+        this.attackEnvelope.connect(this.outputScaler);
         this.outputScaler.connect(this.bypassNode);
         
         this.oscillator.start();
@@ -74,16 +83,17 @@ export class LFO {
 
         this.inputs = {
             'Rate CV': { x: this.width / 2 - 40, y: this.height, type: 'cv', target: this.oscillator.frequency, orientation: 'vertical' },
-            'Gate': { x: this.width / 2 + 40, y: this.height, type: 'gate', target: this.gateReceiver.gain, orientation: 'vertical' }
+            'Gate': { x: this.width / 2 + 40, y: this.height, type: 'gate', target: this.gateProcessorNode, orientation: 'vertical' }
         };
         this.outputs = {
             'SALIDA': { x: this.width, y: this.height / 2, type: 'cv', source: this.bypassNode, orientation: 'horizontal' }
         };
 
-        if (Object.keys(initialState).length > 0) {
-            this.setState(initialState);
+        if (Object.keys(this.initialState).length > 0) {
+            this.setState(this.initialState);
         }
     }
+
 
     draw(ctx, isSelected, hoveredConnectorInfo) {
         ctx.save();
@@ -109,14 +119,14 @@ export class LFO {
             ctx.textAlign = 'left';
             ctx.fillText(`Rate: ${this.oscillator.frequency.value.toFixed(2)}Hz`, 10, 40);
             ctx.textAlign = 'right';
-            ctx.fillText(`Depth: ${this.depth.gain.value.toFixed(2)}`, this.width - 10, 40);
+            ctx.fillText(`Depth: ${this.lfoDepthGain.gain.value.toFixed(2)}`, this.width - 10, 40);
 
             const isNoise = this.waveforms[this.currentWaveformIndex] === 'noise';
             ctx.globalAlpha = isNoise ? 0.5 : 1.0;
             this.drawVerticalSlider(ctx, 'rate', 30, 60, 100, 0.01, 20, this.oscillator.frequency.value, false);
             ctx.globalAlpha = 1.0;
             
-            this.drawVerticalSlider(ctx, 'depth', this.width - 30, 60, 100, 0.01, 1000, this.depth.gain.value, true);
+            this.drawVerticalSlider(ctx, 'depth', this.width - 30, 60, 100, 0.01, 1000, this.lfoDepthGain.gain.value, true);
 
             ctx.beginPath();
             ctx.arc(this.width / 2, 115, 25, 0, Math.PI * 2);
@@ -126,7 +136,8 @@ export class LFO {
             ctx.font = '10px Arial';
             ctx.textAlign = 'center';
             ctx.fillText(`Ataque`, this.width/2, 190);
-            this.drawHorizontalSlider(ctx, 'attack', 20, 205, this.width - 40, 0, 1, 1 - (Math.log(this.gateSmoother.frequency.value/0.1) / Math.log(1000/0.1)), false);
+            const attackValueForSlider = (this.attackTimeConstant - 0.001) / (3.5 - 0.001);
+            this.drawHorizontalSlider(ctx, 'attack', 20, 205, this.width - 40, 0, 1, attackValueForSlider, false);
         }
 
         ctx.restore();
@@ -145,32 +156,27 @@ export class LFO {
                 this.oscillator.frequency.setValueAtTime(newRate, audioContext.currentTime);
             } else if (this.activeControl === 'depth') {
                 const newDepth = Math.exp(Math.log(0.01) + normalizedValue * (Math.log(1000) - Math.log(0.01)));
-                this.depth.gain.setValueAtTime(newDepth, audioContext.currentTime);
+                this.lfoDepthGain.gain.setValueAtTime(newDepth, audioContext.currentTime);
             }
         } else if (this.activeControl === 'attack') {
             const localX = worldPos.x - this.x;
             let normalizedValue = (localX - sliderRect.x) / sliderRect.width;
             normalizedValue = Math.max(0, Math.min(1, normalizedValue));
             
-            const minFreq = 0.1;
-            const maxFreq = 1000;
-            const logMin = Math.log(minFreq);
-            const logMax = Math.log(maxFreq);
-            const invertedNormalizedValue = 1 - normalizedValue;
-            const logNew = logMin + invertedNormalizedValue * (logMax - logMin);
-            const newFreq = Math.exp(logNew);
-            
-            this.gateSmoother.frequency.setTargetAtTime(newFreq, audioContext.currentTime, 0.02);
+            const minTime = 0.001;
+            const maxTime = 3.5;
+            this.attackTimeConstant = minTime + normalizedValue * (maxTime - minTime);
         }
     }
 
     disconnect() {
         this.oscillator.disconnect();
-        this.depth.disconnect();
-        this.dcOffset.disconnect();
-        this.gateReceiver.disconnect();
-        this.gateSmoother.disconnect();
-        this.gateGain.disconnect();
+        this.lfoDepthGain.disconnect();
+        this.attackEnvelope.disconnect();
+        if (this.gateProcessorNode) {
+            this.gateProcessorNode.port.close();
+            this.gateProcessorNode.disconnect();
+        }
         this.outputScaler.disconnect();
         this.bypassNode.disconnect();
         this.noise.disconnect();
@@ -182,8 +188,8 @@ export class LFO {
             type: 'LFO',
             x: this.x, y: this.y,
             rate: this.oscillator.frequency.value,
-            depth: this.depth.gain.value,
-            attack: this.gateSmoother.frequency.value,
+            depth: this.lfoDepthGain.gain.value,
+            attack: this.attackTimeConstant,
             waveform: this.waveforms[this.currentWaveformIndex],
             isBypassed: this.isBypassed
         };
@@ -193,23 +199,24 @@ export class LFO {
         this.id = state.id || this.id;
         this.x = state.x; 
         this.y = state.y;
-        this.oscillator.frequency.setValueAtTime(state.rate, audioContext.currentTime);
-        if (state.depth !== undefined) {
-            this.depth.gain.setValueAtTime(state.depth, audioContext.currentTime);
-        }
-        if (state.attack !== undefined) {
-            this.gateSmoother.frequency.setValueAtTime(state.attack, audioContext.currentTime);
-        }
-        const wfIndex = this.waveforms.indexOf(state.waveform);
-        this.currentWaveformIndex = (wfIndex !== -1) ? wfIndex : 0;
-        this.setWaveform(this.waveforms[this.currentWaveformIndex]);
-        if (state.isBypassed !== undefined) {
-            this.isBypassed = state.isBypassed;
-            this.bypassNode.gain.value = this.isBypassed ? 0 : 1;
+        if (this.oscillator) {
+            this.oscillator.frequency.setValueAtTime(state.rate, audioContext.currentTime);
+            if (state.depth !== undefined) {
+                this.lfoDepthGain.gain.setValueAtTime(state.depth, audioContext.currentTime);
+            }
+            if (state.attack !== undefined) {
+                this.attackTimeConstant = state.attack;
+            }
+            const wfIndex = this.waveforms.indexOf(state.waveform);
+            this.currentWaveformIndex = (wfIndex !== -1) ? wfIndex : 0;
+            this.setWaveform(this.waveforms[this.currentWaveformIndex]);
+            if (state.isBypassed !== undefined) {
+                this.isBypassed = state.isBypassed;
+                this.bypassNode.gain.value = this.isBypassed ? 0 : 1;
+            }
         }
     }
 
-    // El resto de métodos que no se han modificado
     drawHorizontalSlider(ctx, paramName, x, y, width, minVal, maxVal, currentValue, isLogarithmic) {
         const knobRadius = 8;
         ctx.strokeStyle = '#555';
@@ -336,17 +343,17 @@ export class LFO {
         this.bypassNode.gain.linearRampToValueAtTime(newGain, now + rampTime);
     }
     setWaveform(waveform) {
-        try { this.oscillator.disconnect(this.depth); } catch (e) { /* Ignore if not connected */ }
-        try { this.noise.disconnect(this.depth); } catch (e) { /* Ignore if not connected */ }
+        if (!this.oscillator) return;
+        try { this.oscillator.disconnect(this.lfoDepthGain); } catch (e) { /* Ignorar */ }
+        try { this.noise.disconnect(this.lfoDepthGain); } catch (e) { /* Ignorar */ }
+        
         if (waveform === 'noise') {
-            this.noise.connect(this.depth);
-        } else if (waveform === 'pulse') {
-            this.oscillator.type = 'square';
-            this.oscillator.connect(this.depth);
+            this.noise.connect(this.lfoDepthGain);
         } else {
-            this.oscillator.type = waveform;
-            this.oscillator.connect(this.depth);
+            this.oscillator.type = waveform === 'pulse' ? 'square' : waveform;
+            this.oscillator.connect(this.lfoDepthGain);
         }
+        
         const wfIndex = this.waveforms.indexOf(waveform);
         if (wfIndex !== -1) {
             this.currentWaveformIndex = wfIndex;
