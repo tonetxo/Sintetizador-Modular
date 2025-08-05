@@ -1176,6 +1176,20 @@ function setupEventListeners() {
   document.querySelectorAll('#context-menu .context-menu-item').forEach(item => {
     item.addEventListener('click', async (e) => {
       try {
+        // Check if this item is a submenu trigger
+        if (e.target.classList.contains('context-menu-has-submenu')) {
+          e.stopPropagation(); // Prevent the main menu from closing immediately
+          // Find the submenu within this item
+          const submenu = e.target.querySelector('.context-submenu');
+          if (submenu) {
+            // Position the submenu relative to the clicked item
+            submenu.style.left = `${e.target.offsetWidth}px`;
+            submenu.style.top = `0px`;
+            submenu.style.display = 'block';
+          }
+          return; // Do not add a module
+        }
+
         const moduleType = e.target.getAttribute('data-module');
         const worldPos = screenToWorld(
           parseFloat(contextMenu.style.left.slice(0, -2)),
@@ -1183,14 +1197,21 @@ function setupEventListeners() {
         );
         await addModule(moduleType, worldPos.x, worldPos.y);
         contextMenu.style.display = 'none';
+        // Hide all submenus when a module is added
+        document.querySelectorAll('.context-submenu').forEach(sub => sub.style.display = 'none');
       } catch (error) {
         console.error("Error adding module from context menu:", error);
       }
     });
   });
 
+  // Add event listener to hide submenus when clicking outside
   window.addEventListener('click', (e) => {
-    if (!contextMenu.contains(e.target)) contextMenu.style.display = 'none';
+    if (!contextMenu.contains(e.target)) {
+      contextMenu.style.display = 'none';
+      // Hide all submenus when main context menu is hidden
+      document.querySelectorAll('.context-submenu').forEach(sub => sub.style.display = 'none');
+    }
     if (!patchContextMenu.contains(e.target)) patchContextMenu.style.display = 'none';
     if (!visualizerContextMenu.contains(e.target)) visualizerContextMenu.style.display = 'none';
   });

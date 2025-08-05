@@ -100,3 +100,32 @@ body {
     border-radius: 3px;
     /* Eliminado el margin para un mejor ajuste */
 }
+
+/* Estilos para el submenú */
+.context-menu-has-submenu {
+    position: relative; /* Necesario para posicionar el submenú */
+}
+
+.context-submenu {
+    display: none; /* Oculto por defecto */
+    position: absolute;
+    background-color: #2a2a2a; /* Mismo fondo que el menú principal */
+    border: 1px solid #555;
+    min-width: 160px; /* Ancho mínimo para el submenú */
+    z-index: 1001; /* Asegura que esté por encima de otros elementos */
+    left: 100%; /* Posiciona el submenú a la derecha del elemento padre */
+    top: 0; /* Alinea la parte superior del submenú con el elemento padre */
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+/* Asegurar que los items dentro del submenú tengan el mismo estilo */
+.context-submenu .context-menu-item {
+    padding: 8px 15px;
+    cursor: pointer;
+    white-space: nowrap; /* Evita que el texto se rompa */
+}
+
+.context-submenu .context-menu-item:hover {
+    background-color: #4a90e2;
+    color: white;
+}

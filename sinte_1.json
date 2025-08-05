@@ -47,7 +47,7 @@
       "type": "VCF",
       "x": 779,
       "y": -15,
-      "cutoff": 1000,
+      "cutoff": 13297.1103515625,
       "resonance": 1,
       "filterType": "lowpass",
       "bypassed": false
@@ -74,12 +74,12 @@
     {
       "id": "compressor-1754281368296",
       "type": "Compressor",
-      "x": 1040,
-      "y": 321,
-      "threshold": -24,
-      "ratio": 12,
-      "attack": 0.003,
-      "release": 0.25,
+      "x": 1035,
+      "y": 313,
+      "threshold": -37.916666666666664,
+      "ratio": 17.308333333333334,
+      "attack": 0.8708333333333333,
+      "release": 0.8375,
       "bypassed": false
     },
     {
@@ -88,7 +88,7 @@
       "x": 50.84579338842957,
       "y": 168.88631404958676,
       "rate": 8,
-      "depth": 3,
+      "depth": 0.12425552308559418,
       "attack": 0.10000000149011612,
       "waveform": "sine",
       "isBypassed": false
