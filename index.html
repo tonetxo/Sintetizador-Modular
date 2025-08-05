@@ -10,9 +10,11 @@
     <div id="ui-container">
         <button id="save-patch-btn">Guardar Patch</button>
         <button id="load-patch-btn">Cargar Patch</button>
-        <div id="audio-status" style="margin-left: 10px; color: #E0E0E0;">
-        Audio: Clic en la página para activar
-        </div>
+        
+    </div>
+    <div id="visualizer-module">
+        <div class="module-header">Visualizer</div>
+        <canvas id="visualizer-canvas"></canvas>
     </div>
     <canvas id="synth-canvas"></canvas>
     
@@ -32,9 +34,10 @@
         <div class="context-menu-item" data-module="Osciloscopio">Añadir Osciloscopio</div>
         <div class="context-menu-item" data-module="Math">Añadir Módulo de Mates</div>
         <div class="context-menu-item" data-module="Microphone">Usar Micrófono</div>
-        <div class="context-menu-item" data-module="AudioPlayer">Reproducir Audio</div>
+        
         <div class="context-menu-item" data-module="Vocoder">Añadir Vocoder</div>
         <div class="context-menu-item" data-module="NoiseGenerator">Añadir Generador de Ruido</div>
+        <div class="context-menu-item" data-module="AudioPlayer">Reproducir Audio</div>
     </div>
 
     <div id="patch-context-menu" class="context-menu"></div>

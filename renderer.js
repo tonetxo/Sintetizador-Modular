@@ -1,5 +1,6 @@
 // renderer.js
 console.log('[DEBUG] renderer.js script started');
+window.electronAPI.logMessage('[DEBUG] renderer.js script started');
 
 import { audioContext, onAudioReady } from './modules/AudioContext.js';
 import { VCO } from './modules/VCO.js';
@@ -18,6 +19,7 @@ import { Compressor } from './modules/Compressor.js';
 import { Reverb } from './modules/Reverb.js';
 import { Microphone } from './modules/Microphone.js';
 import { AudioPlayer } from './modules/AudioPlayer.js';
+
 import { Vocoder } from './modules/Vocoder.js';
 import { MathModule } from './modules/Math.js';
 import { NoiseGenerator } from './modules/NoiseGenerator.js';
@@ -27,7 +29,9 @@ const canvas = document.getElementById('synth-canvas');
 const ctx = canvas.getContext('2d');
 const contextMenu = document.getElementById('context-menu');
 const patchContextMenu = document.getElementById('patch-context-menu');
-const audioStatus = document.getElementById('audio-status');
+const visualizerCanvas = document.getElementById('visualizer-canvas');
+const visualizerCtx = visualizerCanvas.getContext('2d');
+
 const errorMessage = document.getElementById('error-message');
 
 // Application State
@@ -53,6 +57,9 @@ let mousePos = { x: 0, y: 0 };
 let hoveredConnectorInfo = null;
 let analyser = null;
 let dataArray = null;
+
+let isDraggingVisualizer = false;
+let visualizerDragOffset = { x: 0, y: 0 };
 
 // View settings
 const view = { x: 0, y: 0, zoom: 1, minZoom: 0.2, maxZoom: 2.0 };
@@ -97,7 +104,7 @@ async function initAudioContext() {
   return new Promise((resolve) => {
     onAudioReady(() => {
       console.log('AudioContext ready for use');
-      audioStatus.textContent = "Audio listo";
+      
       resolve();
     });
   });
@@ -204,24 +211,19 @@ function drawAudioVisualization() {
 
   analyser.getByteFrequencyData(dataArray);
 
-  // Clear a portion of the canvas for the visualization
-  // For now, let's draw it at the top of the screen, outside the module area
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for visualization
-  ctx.clearRect(0, 0, canvas.width, 100); // Clear top 100 pixels
+  visualizerCtx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
 
-  const barWidth = (canvas.width / dataArray.length) * 2.5;
+  const barWidth = (visualizerCanvas.width / dataArray.length) * 2.5;
   let x = 0;
 
   for (let i = 0; i < dataArray.length; i++) {
     const barHeight = dataArray[i];
 
-    ctx.fillStyle = `rgb(${barHeight + 100}, 50, 50)`;
-    ctx.fillRect(x, 100 - barHeight / 2, barWidth, barHeight / 2);
+    visualizerCtx.fillStyle = `rgb(${barHeight + 100}, 50, 50)`;
+    visualizerCtx.fillRect(x, visualizerCanvas.height - barHeight / 2, barWidth, barHeight / 2);
 
     x += barWidth + 1;
   }
-  ctx.restore();
 }
 
 function updateModuleUI(module) {
@@ -591,11 +593,10 @@ function createAudioPlayerUI(module) {
     const fileInput = module.ui.querySelector('.audio-file-input');
     if (fileInput) {
       fileInput.addEventListener('change', (e) => {
-        try {
-          module.loadFile(e.target.files[0]);
-        } catch (error) {
-          console.error("Error loading audio file:", error);
-          showError("Error al cargar el archivo de audio");
+        const file = e.target.files[0];
+        if (file) {
+            console.log(`[Renderer] Attempting to call decodeAudioFile for module ${module.id} with path ${file.path}`);
+            window.electronAPI.decodeAudioFile(file.path, module.id);
         }
       });
     }
@@ -618,6 +619,15 @@ function createAudioPlayerUI(module) {
       });
     }
 
+    // Update button text when audio is loaded or stopped externally
+    module.onPlaybackStateChange = (isPlaying) => {
+        if (isPlaying) {
+            playStopBtn.textContent = 'Stop';
+        } else {
+            playStopBtn.textContent = 'Play';
+        }
+    };
+
     const loopCheckbox = module.ui.querySelector('.loop-checkbox');
     if (loopCheckbox) {
       loopCheckbox.addEventListener('change', (e) => {
@@ -637,6 +647,8 @@ function createAudioPlayerUI(module) {
     console.error("Error creating audio player UI:", error);
   }
 }
+
+
 
 // Event Handlers
 function onMouseDown(e) {
@@ -1083,6 +1095,48 @@ function setupEventListeners() {
 
   window.electronAPI.onRequestLoadPatch(loadPatch);
   window.electronAPI.onRequestSavePatch(savePatch);
+
+  const visualizerHeader = document.querySelector('#visualizer-module .module-header');
+  visualizerHeader.addEventListener('mousedown', (e) => {
+    isDraggingVisualizer = true;
+    visualizerDragOffset.x = e.clientX - visualizerHeader.parentElement.offsetLeft;
+    visualizerDragOffset.y = e.clientY - visualizerHeader.parentElement.offsetTop;
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (isDraggingVisualizer) {
+      const visualizerModule = document.getElementById('visualizer-module');
+      visualizerModule.style.left = `${e.clientX - visualizerDragOffset.x}px`;
+      visualizerModule.style.top = `${e.clientY - visualizerDragOffset.y}px`;
+      // Remove transform to prevent conflict with positioning
+      visualizerModule.style.transform = 'none'; 
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    isDraggingVisualizer = false;
+  });
+
+  window.electronAPI.onDecodeComplete((_event, { success, moduleId, decodedData, error }) => {
+      console.log(`[Renderer] onDecodeComplete received for module ${moduleId}. Success: ${success}`);
+      const targetModule = modules.find(m => m.id === moduleId);
+      if (!targetModule) return;
+
+      if (success) {
+          try {
+              targetModule.loadDecodedData(decodedData);
+              window.electronAPI.logMessage(`AudioPlayer ${moduleId}: Buffer loaded successfully.`);
+          } catch (e) {
+              window.electronAPI.logMessage(`AudioPlayer ${moduleId}: Error reconstructing buffer: ${e.message}`);
+              showError(`Error processing decoded audio: ${e.message}`);
+          }
+      } else {
+          window.electronAPI.logMessage(`AudioPlayer ${moduleId}: Decode failed: ${error}`);
+          showError(`Failed to decode audio: ${error}`);
+      }
+  });
+
+  
 }
 
 // Start the application when DOM is loaded

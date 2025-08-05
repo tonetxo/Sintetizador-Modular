@@ -2,8 +2,25 @@ const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+let mainWindow;
+let decoderWindow;
+
+function createDecoderWindow() {
+    decoderWindow = new BrowserWindow({
+        show: false,
+        webPreferences: {
+            preload: path.join(__dirname, 'preload-decoder.js'),
+            nodeIntegration: false,
+            contextIsolation: true
+        }
+    });
+    decoderWindow.loadFile('decoder.html');
+    // decoderWindow.webContents.openDevTools(); // Habilitar DevTools para depuración
+    decoderWindow.on('closed', () => { decoderWindow = null; });
+}
+
 function createWindow() {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1600,
     height: 900,
     webPreferences: {
@@ -14,10 +31,16 @@ function createWindow() {
     backgroundColor: '#333333'
   });
 
-  mainWindow.loadFile('index.html');
-
-  // Abrir las herramientas de desarrollo automáticamente
+  // mainWindow.loadFile('index.html'); // Moved to app.whenReady()
   mainWindow.webContents.openDevTools();
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    if (decoderWindow) {
+      decoderWindow.close();
+      decoderWindow = null;
+    }
+  });
 
   mainWindow.webContents.on('did-finish-load', () => {
     const menuTemplate = [
@@ -27,16 +50,12 @@ function createWindow() {
           {
             label: 'Load Patch',
             accelerator: 'CmdOrCtrl+L',
-            click: () => {
-              mainWindow.webContents.send('request-load-patch');
-            }
+            click: () => { mainWindow.webContents.send('request-load-patch'); }
           },
           {
             label: 'Save Patch',
             accelerator: 'CmdOrCtrl+S',
-            click: () => {
-              mainWindow.webContents.send('request-save-patch');
-            }
+            click: () => { mainWindow.webContents.send('request-save-patch'); }
           },
           { type: 'separator' },
           { role: 'quit' }
@@ -72,60 +91,72 @@ function createWindow() {
     const menu = Menu.buildFromTemplate(menuTemplate);
     Menu.setApplicationMenu(menu);
   });
-
-  return mainWindow;
 }
 
 app.whenReady().then(() => {
   createWindow();
-
-  app.on('activate', function () {
+  createDecoderWindow();
+  app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+
+  ipcMain.handle('decode-audio-file', (event, { filePath, moduleId }) => {
+    try {
+        const audioData = fs.readFileSync(filePath);
+        if (decoderWindow) {
+            decoderWindow.webContents.send('decode-request', { audioData, moduleId });
+        }
+    } catch (error) {
+        mainWindow.webContents.send('decode-complete', { success: false, moduleId, error: error.message });
+    }
+  });
+
+  ipcMain.on('decode-result', (event, result) => {
+    if (mainWindow) {
+        mainWindow.webContents.send('decode-complete', result);
+    }
+  });
+
+  ipcMain.handle('save-patch', async (event, patch) => {
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Guardar Patch',
+      defaultPath: 'patch.json',
+      filters: [{ name: 'JSON Files', extensions: ['json'] }]
+    });
+    if (canceled || !filePath) return { success: false };
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(patch, null, 2));
+      return { success: true, path: filePath };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('load-patch', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Cargar Patch',
+      properties: ['openFile'],
+      filters: [{ name: 'JSON Files', extensions: ['json'] }]
+    });
+    if (canceled || filePaths.length === 0) return { success: false };
+    return loadPatchFromFile(filePaths[0]);
+  });
+
+  ipcMain.handle('load-patch-from-file', (event, filePath) => {
+      return loadPatchFromFile(filePath);
+  });
+
+  ipcMain.handle('log-message', (event, message) => {
+    const logFilePath = path.join(app.getPath('userData'), 'app.log');
+    fs.appendFileSync(logFilePath, `[${new Date().toISOString()}] ${message}\n`);
+  });
+
+  // Load the main window content AFTER all IPC handlers are registered
+  mainWindow.loadFile('index.html');
 });
 
-app.on('window-all-closed', function () {
+app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
-});
-
-ipcMain.handle('save-patch', async (event, patch) => {
-  const window = BrowserWindow.fromWebContents(event.sender);
-  const { canceled, filePath } = await dialog.showSaveDialog(window, {
-    title: 'Guardar Patch',
-    defaultPath: 'patch.json',
-    filters: [{ name: 'JSON Files', extensions: ['json'] }]
-  });
-
-  if (canceled || !filePath) {
-    return { success: false };
-  }
-
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(patch, null, 2));
-    return { success: true, path: filePath };
-  } catch (error) {
-    console.error('Error guardando el patch:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-ipcMain.handle('load-patch', async (event) => {
-  const window = BrowserWindow.fromWebContents(event.sender);
-  const { canceled, filePaths } = await dialog.showOpenDialog(window, {
-    title: 'Cargar Patch',
-    properties: ['openFile'],
-    filters: [{ name: 'JSON Files', extensions: ['json'] }]
-  });
-
-  if (canceled || filePaths.length === 0) {
-    return { success: false };
-  }
-
-  return loadPatchFromFile(filePaths[0]);
-});
-
-ipcMain.handle('load-patch-from-file', async (event, filePath) => {
-    return loadPatchFromFile(filePath);
 });
 
 function loadPatchFromFile(filePath) {
@@ -134,7 +165,6 @@ function loadPatchFromFile(filePath) {
         const patchData = JSON.parse(fs.readFileSync(absolutePath, 'utf-8'));
         return { success: true, data: patchData };
     } catch (error) {
-        console.error(`Error cargando el patch desde ${filePath}:`, error);
         return { success: false, error: error.message };
     }
 }

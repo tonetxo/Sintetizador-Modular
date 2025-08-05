@@ -1,7 +1,7 @@
 import { audioContext } from './AudioContext.js';
 
 export class AudioPlayer {
-    constructor(x, y, id = null, initialState = {}) {
+    constructor(x, y, id = null) {
         this.id = id || `audioplayer-${Date.now()}`;
         this.x = x;
         this.y = y;
@@ -19,44 +19,67 @@ export class AudioPlayer {
             'audio': { x: this.width, y: this.height / 2, type: 'audio', source: this.output, orientation: 'horizontal' }
         };
         this.inputs = {};
-
-        if (initialState.audioData) {
-            this.loadFromState(initialState.audioData);
-        }
     }
 
-    async loadFile(file) {
+    loadDecodedData(decodedData) {
         try {
-            const arrayBuffer = await file.arrayBuffer();
-            this.audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-            console.log('Audio file loaded and decoded successfully.');
-            if (this.isPlaying) {
-                this.stop();
-                this.play();
+            const newBuffer = audioContext.createBuffer(
+                decodedData.numberOfChannels,
+                decodedData.length,
+                decodedData.sampleRate
+            );
+
+            for (let i = 0; i < decodedData.numberOfChannels; i++) {
+                newBuffer.copyToChannel(new Float32Array(decodedData.channelData[i]), i);
             }
-        } catch (err) {
-            console.error('Error loading or decoding audio file:', err);
-            alert('Failed to load audio file. Please choose a valid audio format.');
-        }
-    }
 
-    async loadFromState(audioData) {
-        try {
-            const buffer = new Uint8Array(audioData).buffer;
-            this.audioBuffer = await audioContext.decodeAudioData(buffer);
-        } catch (error) {
-            console.error('Error decoding audio data from state:', error);
+            this.audioBuffer = newBuffer;
+
+            // Reset playback state and update UI after new audio is loaded
+            this.isPlaying = false; // Ensure it's not playing initially
+            if (this.onPlaybackStateChange) {
+                this.onPlaybackStateChange(false); // Set button to 'Play'
+            }
+        } catch (e) {
+            this.audioBuffer = null;
+            throw e;
         }
     }
 
     play() {
-        if (this.isPlaying || !this.audioBuffer) return;
+        if (!this.audioBuffer) return;
+
+        // Ensure AudioContext is running
+        if (audioContext.state === 'suspended') {
+            audioContext.resume().then(() => {
+                this._startPlayback();
+            }).catch(e => {
+                console.error("Error resuming AudioContext:", e);
+                window.electronAPI.logMessage(`AudioPlayer ${this.id}: Error resuming AudioContext: ${e.message}`);
+            });
+        } else if (audioContext.state === 'running') {
+            this._startPlayback();
+        }
+    }
+
+    _startPlayback() {
+        if (this.isPlaying) this.stop(); // Stop if already playing
+
         this.source = audioContext.createBufferSource();
         this.source.buffer = this.audioBuffer;
         this.source.loop = this.loop;
         this.source.connect(this.output);
-        this.source.start();
+        this.source.start(0);
         this.isPlaying = true;
+        if (this.onPlaybackStateChange) this.onPlaybackStateChange(true);
+
+        // Listen for when the sound finishes playing (if not looping)
+        this.source.onended = () => {
+            if (!this.loop) {
+                this.stop();
+                if (this.onPlaybackStateChange) this.onPlaybackStateChange(false);
+            }
+        };
     }
 
     stop() {
@@ -65,9 +88,10 @@ export class AudioPlayer {
         this.source.disconnect();
         this.source = null;
         this.isPlaying = false;
+        if (this.onPlaybackStateChange) this.onPlaybackStateChange(false);
     }
 
-    draw(ctx, isSelected, hoveredConnectorInfo) {
+    draw(ctx, isSelected) {
         ctx.save();
         ctx.translate(this.x, this.y);
 
@@ -82,11 +106,11 @@ export class AudioPlayer {
         ctx.textAlign = 'center';
         ctx.fillText('Audio Player', this.width / 2, 22);
 
-        this.drawConnectors(ctx, hoveredConnectorInfo);
+        this.drawConnectors(ctx);
         ctx.restore();
     }
 
-    drawConnectors(ctx, hovered) {
+    drawConnectors(ctx) {
         const connectorRadius = 8;
         ctx.font = '10px Arial';
 
@@ -96,12 +120,8 @@ export class AudioPlayer {
         const oy = outputProps.y;
         ctx.beginPath();
         ctx.arc(ox, oy, connectorRadius, 0, Math.PI * 2);
-        ctx.fillStyle = (hovered && hovered.module === this && hovered.connector.name === outputName) ? 'white' : '#222';
+        ctx.fillStyle = '#f0a048';
         ctx.fill();
-        ctx.strokeStyle = '#f0a048';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.fillStyle = '#E0E0E0';
         ctx.textAlign = 'right';
         ctx.fillText('OUT', ox - connectorRadius - 4, oy + 4);
     }
@@ -119,17 +139,18 @@ export class AudioPlayer {
     disconnect() {
         this.stop();
         this.output.disconnect();
+        if (this.decoderWorker) {
+            this.decoderWorker.terminate();
+        }
     }
 
-    async getState() {
-        let audioData = null;
-        if (this.audioBuffer) {
-            // This is tricky, we can't directly get the raw file data.
-            // A better approach would be to store the file path or the raw ArrayBuffer on load.
-            // For now, we'll skip saving the audio data itself.
-        }
+    getState() {
         return {
-            id: this.id, type: 'AudioPlayer', x: this.x, y: this.y, loop: this.loop
+            id: this.id,
+            type: 'AudioPlayer',
+            x: this.x,
+            y: this.y,
+            loop: this.loop
         };
     }
 

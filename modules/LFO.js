@@ -126,7 +126,7 @@ export class LFO {
             ctx.font = '10px Arial';
             ctx.textAlign = 'center';
             ctx.fillText(`Ataque`, this.width/2, 190);
-            this.drawHorizontalSlider(ctx, 'attack', 20, 205, this.width - 40, 0, 1, 1 - (Math.log(this.gateSmoother.frequency.value/0.5) / Math.log(500/0.5)), false);
+            this.drawHorizontalSlider(ctx, 'attack', 20, 205, this.width - 40, 0, 1, 1 - (Math.log(this.gateSmoother.frequency.value/0.1) / Math.log(1000/0.1)), false);
         }
 
         ctx.restore();
@@ -152,8 +152,8 @@ export class LFO {
             let normalizedValue = (localX - sliderRect.x) / sliderRect.width;
             normalizedValue = Math.max(0, Math.min(1, normalizedValue));
             
-            const minFreq = 0.5;
-            const maxFreq = 500;
+            const minFreq = 0.1;
+            const maxFreq = 1000;
             const logMin = Math.log(minFreq);
             const logMax = Math.log(maxFreq);
             const invertedNormalizedValue = 1 - normalizedValue;
@@ -336,8 +336,8 @@ export class LFO {
         this.bypassNode.gain.linearRampToValueAtTime(newGain, now + rampTime);
     }
     setWaveform(waveform) {
-        try { this.oscillator.disconnect(this.depth); } catch (e) {}
-        try { this.noise.disconnect(this.depth); } catch (e) {}
+        try { this.oscillator.disconnect(this.depth); } catch (e) { /* Ignore if not connected */ }
+        try { this.noise.disconnect(this.depth); } catch (e) { /* Ignore if not connected */ }
         if (waveform === 'noise') {
             this.noise.connect(this.depth);
         } else if (waveform === 'pulse') {
