@@ -76,6 +76,8 @@ body {
     align-items: center;
     padding: 0;
     z-index: 500;
+    resize: both;
+    overflow: hidden;
 }
 
 #visualizer-module .module-header {

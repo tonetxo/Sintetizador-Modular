@@ -52,7 +52,6 @@ let dragOffset = { x: 0, y: 0 };
 let isPatching = false;
 let patchStart = null;
 let isPanning = false;
-let lastMousePos = { x: 0, y: 0 };
 let mousePos = { x: 0, y: 0 };
 let hoveredConnectorInfo = null;
 let analyser = null;
@@ -661,7 +660,6 @@ function onMouseDown(e) {
 
     if (e.button === 1 || e.altKey) {
       isPanning = true;
-      lastMousePos = mousePos;
       canvas.classList.add('grabbing');
       return;
     }
@@ -731,7 +729,6 @@ function onMouseDown(e) {
       selectedModules = [];
       selectedConnection = null;
       isPanning = true;
-      lastMousePos = mousePos;
       canvas.classList.add('grabbing');
     }
   } catch (error) {
@@ -1097,12 +1094,25 @@ function setupEventListeners() {
   window.electronAPI.onRequestLoadPatch(loadPatch);
   window.electronAPI.onRequestSavePatch(savePatch);
 
+  const visualizerModule = document.getElementById('visualizer-module');
   const visualizerHeader = document.querySelector('#visualizer-module .module-header');
+  
   visualizerHeader.addEventListener('mousedown', (e) => {
     isDraggingVisualizer = true;
     visualizerDragOffset.x = e.clientX - visualizerHeader.parentElement.offsetLeft;
     visualizerDragOffset.y = e.clientY - visualizerHeader.parentElement.offsetTop;
   });
+
+  const visualizerResizeObserver = new ResizeObserver(() => {
+    requestAnimationFrame(() => {
+      if (visualizerCanvas.width !== visualizerCanvas.offsetWidth ||
+          visualizerCanvas.height !== visualizerCanvas.offsetHeight) {
+        visualizerCanvas.width = visualizerCanvas.offsetWidth;
+        visualizerCanvas.height = visualizerCanvas.offsetHeight;
+      }
+    });
+  });
+  visualizerResizeObserver.observe(visualizerModule);
 
   document.addEventListener('mousemove', (e) => {
     if (isDraggingVisualizer) {
