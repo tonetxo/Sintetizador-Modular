@@ -21,6 +21,20 @@ export class VCF {
         this.filter.frequency.setValueAtTime(1000, audioContext.currentTime);
         this.filter.Q.setValueAtTime(1, audioContext.currentTime);
 
+        // Create intermediate GainNodes for modulation depth control
+        this.frequencyModulator = audioContext.createGain();
+        this.QModulator = audioContext.createGain();
+
+        // Set initial modulation depths (these values can be adjusted)
+        // These gains now act as the *depth* of modulation
+        this.frequencyModulator.gain.value = 5000; // A high value for frequency modulation depth
+        this.QModulator.gain.value = 20; // A value for Q modulation depth
+
+        // Connect the output of the modulation gain nodes to the filter's AudioParams
+        // The LFO will connect to frequencyModulator, and its output will modulate filter.frequency
+        this.frequencyModulator.connect(this.filter.frequency);
+        this.QModulator.connect(this.filter.Q);
+
         this.inputGain.connect(this.filter);
         this.filter.connect(this.outputGain);
         this.bypassGain.connect(this.outputGain);
@@ -32,8 +46,9 @@ export class VCF {
 
         this.inputs = {
             'audio': { x: 0, y: this.height / 2, type: 'audio', target: [this.inputGain, this.bypassGain], orientation: 'horizontal' },
-            'CV 1': { x: this.width / 2 - 40, y: this.height, type: 'cv', target: this.filter.frequency, orientation: 'vertical' },
-            'CV 2': { x: this.width / 2 + 40, y: this.height, type: 'cv', target: this.filter.frequency, orientation: 'vertical' }
+            // The CV input now targets the modulation gain nodes themselves
+            'CV 1': { x: this.width / 2 - 40, y: this.height, type: 'cv', target: this.frequencyModulator, orientation: 'vertical' },
+            'CV 2': { x: this.width / 2 + 40, y: this.height, type: 'cv', target: this.QModulator, orientation: 'vertical' } // Assuming CV 2 is for Q modulation
         };
         this.outputs = {
             'audio': { x: this.width, y: this.height / 2, type: 'audio', source: this.outputGain, orientation: 'horizontal' }

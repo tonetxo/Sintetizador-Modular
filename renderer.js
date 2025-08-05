@@ -293,15 +293,15 @@ function drawConcentricWavesVisualization() {
     // Dynamic positioning based on overall frequency content and intensity
     const freqRatio = averageIndex / bufferLength;
     // Aumentar el rango de movimiento horizontal y vertical
-    const originX = width / 2 + (freqRatio - 0.5) * (width * 0.8); 
-    const originY = height / 2 + ((rms / 255) - 0.5) * (height * 0.6); // Usar 255 para normalizar RMS
+    const originX = width / 2 + (freqRatio - 0.5) * (width * 1.5); // Multiplicador aumentado a 1.5 para mayor movimiento horizontal
+    const originY = height / 2 + ((rms / 255) - 0.5) * (height * 0.8); // Multiplicador aumentado a 0.8 para mayor movimiento vertical
 
     // Visual parameters based on energy bands
-    const baseRadius = rms * 1.5; // Base size influenced by overall intensity, slightly larger
+    const baseRadius = rms * 0.8; // Reducir la influencia de RMS en el radio base
     // Hacer el número de círculos más dinámico y con un rango más amplio
-    const numCircles = 2 + Math.floor(rms / 20) + Math.floor(normalizedMid * 10); 
-    const maxRadius = baseRadius + (normalizedLow * width * 0.2); // Lows expand max radius more
-    const lineWidth = 1 + (normalizedHigh * 5); // Highs affect line thickness more
+    const numCircles = 2 + Math.floor(rms / 25) + Math.floor(normalizedMid * 8); // Ajustar para un rango más controlado
+    const maxRadius = baseRadius + (normalizedLow * width * 0.15); // Reducir la influencia de Lows en el radio máximo
+    const lineWidth = 1 + (normalizedHigh * 4); // Highs affect line thickness
 
     // Dynamic color based on dominant frequency band
     let hue = 0; 
