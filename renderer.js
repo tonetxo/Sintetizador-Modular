@@ -31,6 +31,7 @@ const contextMenu = document.getElementById('context-menu');
 const patchContextMenu = document.getElementById('patch-context-menu');
 const visualizerCanvas = document.getElementById('visualizer-canvas');
 const visualizerCtx = visualizerCanvas.getContext('2d');
+const visualizerContextMenu = document.getElementById('visualizer-context-menu');
 
 const errorMessage = document.getElementById('error-message');
 
@@ -59,6 +60,7 @@ let dataArray = null;
 
 let isDraggingVisualizer = false;
 let visualizerDragOffset = { x: 0, y: 0 };
+let currentVisualStyle = 'bars'; // 'bars' or 'concentric_waves'
 
 // View settings
 const view = { x: 0, y: 0, zoom: 1, minZoom: 0.2, maxZoom: 2.0 };
@@ -206,24 +208,134 @@ function drawModules() {
 }
 
 function drawAudioVisualization() {
-  if (!analyser || !dataArray) return;
+    if (!analyser || !dataArray) return;
 
-  analyser.getByteFrequencyData(dataArray);
+    analyser.getByteFrequencyData(dataArray);
+    visualizerCtx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
 
-  visualizerCtx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
-
-  const barWidth = (visualizerCanvas.width / dataArray.length) * 2.5;
-  let x = 0;
-
-  for (let i = 0; i < dataArray.length; i++) {
-    const barHeight = dataArray[i];
-
-    visualizerCtx.fillStyle = `rgb(${barHeight + 100}, 50, 50)`;
-    visualizerCtx.fillRect(x, visualizerCanvas.height - barHeight / 2, barWidth, barHeight / 2);
-
-    x += barWidth + 1;
-  }
+    switch (currentVisualStyle) {
+        case 'bars':
+            drawBarsVisualization();
+            break;
+        case 'concentric_waves':
+            drawConcentricWavesVisualization();
+            break;
+    }
 }
+
+function drawBarsVisualization() {
+    const width = visualizerCanvas.width;
+    const height = visualizerCanvas.height;
+    const barWidth = (width / dataArray.length) * 2.5;
+    let x = 0;
+
+    for (let i = 0; i < dataArray.length; i++) {
+        const barHeight = (dataArray[i] / 255.0) * height;
+        visualizerCtx.fillStyle = `rgb(${dataArray[i] + 100}, 50, 50)`;
+        visualizerCtx.fillRect(x, height - barHeight, barWidth, barHeight);
+        x += barWidth + 1;
+    }
+}
+
+function drawConcentricWavesVisualization() {
+    const width = visualizerCanvas.width;
+    const height = visualizerCanvas.height;
+    
+    visualizerCtx.fillStyle = '#1a1a1a';
+    visualizerCtx.fillRect(0, 0, width, height);
+
+    const bufferLength = dataArray.length;
+    // Ajustar las bandas de frecuencia para una mejor separación
+    const lowFreqBand = Math.floor(bufferLength * 0.05); // Graves (0-5%)
+    const midFreqBand = Math.floor(bufferLength * 0.25); // Medios (5-25%)
+    // High freq band is the rest (25%-100%)
+
+    let lowEnergy = 0;
+    let midEnergy = 0;
+    let highEnergy = 0;
+    let totalEnergy = 0;
+
+    for (let i = 0; i < bufferLength; i++) {
+        const value = dataArray[i];
+        const squaredValue = value * value;
+        totalEnergy += squaredValue;
+
+        if (i < lowFreqBand) {
+            lowEnergy += squaredValue;
+        } else if (i < midFreqBand) {
+            midEnergy += squaredValue;
+        } else {
+            highEnergy += squaredValue;
+        }
+    }
+
+    const rms = Math.sqrt(totalEnergy / bufferLength);
+
+    // Reducir el umbral para que se dibuje más a menudo
+    if (rms < 2) return; 
+
+    // Normalize energies - usar la suma total para normalizar, no el máximo entre ellas
+    const sumOfBandEnergies = lowEnergy + midEnergy + highEnergy;
+    const normalizedLow = sumOfBandEnergies > 0 ? lowEnergy / sumOfBandEnergies : 0;
+    const normalizedMid = sumOfBandEnergies > 0 ? midEnergy / sumOfBandEnergies : 0;
+    const normalizedHigh = sumOfBandEnergies > 0 ? highEnergy / sumOfBandEnergies : 0;
+
+    let weightedSum = 0;
+    let totalWeight = 0;
+    for (let i = 1; i < bufferLength; i++) {
+        const weight = dataArray[i]; // Usar el valor directamente, no el cuadrado, para un promedio más suave
+        weightedSum += i * weight;
+        totalWeight += weight;
+    }
+
+    const averageIndex = totalWeight === 0 ? 0 : weightedSum / totalWeight;
+
+    // Dynamic positioning based on overall frequency content and intensity
+    const freqRatio = averageIndex / bufferLength;
+    // Aumentar el rango de movimiento horizontal y vertical
+    const originX = width / 2 + (freqRatio - 0.5) * (width * 0.8); 
+    const originY = height / 2 + ((rms / 255) - 0.5) * (height * 0.6); // Usar 255 para normalizar RMS
+
+    // Visual parameters based on energy bands
+    const baseRadius = rms * 1.5; // Base size influenced by overall intensity, slightly larger
+    // Hacer el número de círculos más dinámico y con un rango más amplio
+    const numCircles = 2 + Math.floor(rms / 20) + Math.floor(normalizedMid * 10); 
+    const maxRadius = baseRadius + (normalizedLow * width * 0.2); // Lows expand max radius more
+    const lineWidth = 1 + (normalizedHigh * 5); // Highs affect line thickness more
+
+    // Dynamic color based on dominant frequency band
+    let hue = 0; 
+    if (normalizedLow > normalizedMid && normalizedLow > normalizedHigh) {
+        hue = 0; // Red for bass
+    } else if (normalizedMid > normalizedLow && normalizedMid > normalizedHigh) {
+        hue = 120; // Green for mids
+    } else if (normalizedHigh > normalizedLow && normalizedHigh > normalizedMid) {
+        hue = 240; // Blue for highs
+    } else {
+        // Si no hay una banda dominante clara, usar un gradiente basado en la frecuencia promedio
+        hue = (averageIndex / bufferLength) * 360; 
+    }
+    
+    // Add a subtle glow/blur effect based on overall intensity
+    visualizerCtx.shadowBlur = rms / 20; // Más sensible al RMS
+    visualizerCtx.shadowColor = `hsla(${hue}, 100%, 70%, 0.7)`;
+
+    for (let i = 1; i <= numCircles; i++) {
+        const radius = (i / numCircles) * maxRadius;
+        const alpha = 1 - (i / numCircles); // Fades out further circles
+
+        visualizerCtx.strokeStyle = `hsla(${hue}, 100%, 60%, ${alpha * 0.8})`;
+        visualizerCtx.fillStyle = `hsla(${hue}, 100%, 50%, ${alpha * 0.1})`;
+        visualizerCtx.lineWidth = lineWidth;
+
+        visualizerCtx.beginPath();
+        visualizerCtx.arc(originX, originY, radius, 0, Math.PI * 2);
+        visualizerCtx.stroke();
+        visualizerCtx.fill();
+    }
+    visualizerCtx.shadowBlur = 0; // Reset shadow for other drawings
+}
+
 
 function updateModuleUI(module) {
   if (module.ui) {
@@ -1084,6 +1196,7 @@ function setupEventListeners() {
   window.addEventListener('click', (e) => {
     if (!contextMenu.contains(e.target)) contextMenu.style.display = 'none';
     if (!patchContextMenu.contains(e.target)) patchContextMenu.style.display = 'none';
+    if (!visualizerContextMenu.contains(e.target)) visualizerContextMenu.style.display = 'none';
   });
 
   window.addEventListener('resize', () => {
@@ -1113,6 +1226,20 @@ function setupEventListeners() {
     });
   });
   visualizerResizeObserver.observe(visualizerModule);
+
+  visualizerModule.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    visualizerContextMenu.style.left = `${e.clientX}px`;
+    visualizerContextMenu.style.top = `${e.clientY}px`;
+    visualizerContextMenu.style.display = 'block';
+  });
+
+  document.querySelectorAll('#visualizer-context-menu .context-menu-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      currentVisualStyle = e.target.getAttribute('data-style');
+      visualizerContextMenu.style.display = 'none';
+    });
+  });
 
   document.addEventListener('mousemove', (e) => {
     if (isDraggingVisualizer) {
