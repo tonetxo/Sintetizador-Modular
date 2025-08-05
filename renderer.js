@@ -245,10 +245,8 @@ function drawConcentricWavesVisualization() {
     visualizerCtx.fillRect(0, 0, width, height);
 
     const bufferLength = dataArray.length;
-    // Ajustar las bandas de frecuencia para una mejor separación
-    const lowFreqBand = Math.floor(bufferLength * 0.05); // Graves (0-5%)
-    const midFreqBand = Math.floor(bufferLength * 0.25); // Medios (5-25%)
-    // High freq band is the rest (25%-100%)
+    const lowFreqBand = Math.floor(bufferLength * 0.05); 
+    const midFreqBand = Math.floor(bufferLength * 0.25); 
 
     let lowEnergy = 0;
     let midEnergy = 0;
@@ -271,10 +269,9 @@ function drawConcentricWavesVisualization() {
 
     const rms = Math.sqrt(totalEnergy / bufferLength);
 
-    // Reducir el umbral para que se dibuje más a menudo
-    if (rms < 2) return; 
+    // Reducir el umbral para que se dibuje más a menudo y sea visible
+    if (rms < 1) return; // Umbral muy bajo para asegurar que siempre se dibuje algo
 
-    // Normalize energies - usar la suma total para normalizar, no el máximo entre ellas
     const sumOfBandEnergies = lowEnergy + midEnergy + highEnergy;
     const normalizedLow = sumOfBandEnergies > 0 ? lowEnergy / sumOfBandEnergies : 0;
     const normalizedMid = sumOfBandEnergies > 0 ? midEnergy / sumOfBandEnergies : 0;
@@ -283,7 +280,7 @@ function drawConcentricWavesVisualization() {
     let weightedSum = 0;
     let totalWeight = 0;
     for (let i = 1; i < bufferLength; i++) {
-        const weight = dataArray[i]; // Usar el valor directamente, no el cuadrado, para un promedio más suave
+        const weight = dataArray[i];
         weightedSum += i * weight;
         totalWeight += weight;
     }
@@ -291,38 +288,38 @@ function drawConcentricWavesVisualization() {
     const averageIndex = totalWeight === 0 ? 0 : weightedSum / totalWeight;
 
     // Dynamic positioning based on overall frequency content and intensity
-    const freqRatio = averageIndex / bufferLength;
-    // Aumentar el rango de movimiento horizontal y vertical
-    const originX = width / 2 + (freqRatio - 0.5) * (width * 1.5); // Multiplicador aumentado a 1.5 para mayor movimiento horizontal
-    const originY = height / 2 + ((rms / 255) - 0.5) * (height * 0.8); // Multiplicador aumentado a 0.8 para mayor movimiento vertical
+    // Mapeo más directo y amplio para el movimiento horizontal (tono)
+    const originX = width * 0.1 + (averageIndex / bufferLength) * (width * 0.8); 
+    // Mapeo más directo y amplio para el movimiento vertical (intensidad)
+    const originY = height * 0.1 + (rms / 255) * (height * 0.8); 
 
     // Visual parameters based on energy bands
-    const baseRadius = rms * 0.8; // Reducir la influencia de RMS en el radio base
-    // Hacer el número de círculos más dinámico y con un rango más amplio
-    const numCircles = 2 + Math.floor(rms / 25) + Math.floor(normalizedMid * 8); // Ajustar para un rango más controlado
-    const maxRadius = baseRadius + (normalizedLow * width * 0.15); // Reducir la influencia de Lows en el radio máximo
-    const lineWidth = 1 + (normalizedHigh * 4); // Highs affect line thickness
+    // Número de círculos más directamente proporcional a RMS, con un mínimo
+    const numCircles = 1 + Math.floor(rms / 20); // De 1 a ~12 círculos
+    // Radio máximo escala con intensidad, potenciado por graves, con un mínimo para visibilidad
+    const maxRadius = Math.max(10, (rms / 255) * (width * 0.2) + (normalizedLow * width * 0.1)); // Mínimo de 10px
+    // Grosor de línea escala con agudos, con un mínimo
+    const lineWidth = Math.max(1, 1 + (normalizedHigh * 5)); // Mínimo de 1px
 
     // Dynamic color based on dominant frequency band
-    let hue = 0; 
+    let hue = 0;
     if (normalizedLow > normalizedMid && normalizedLow > normalizedHigh) {
-        hue = 0; // Red for bass
+        hue = 0; // Rojo para graves
     } else if (normalizedMid > normalizedLow && normalizedMid > normalizedHigh) {
-        hue = 120; // Green for mids
+        hue = 120; // Verde para medios
     } else if (normalizedHigh > normalizedLow && normalizedHigh > normalizedMid) {
-        hue = 240; // Blue for highs
+        hue = 240; // Azul para agudos
     } else {
-        // Si no hay una banda dominante clara, usar un gradiente basado en la frecuencia promedio
-        hue = (averageIndex / bufferLength) * 360; 
+        hue = (averageIndex / bufferLength) * 360; // Fallback a la lógica de tono original
     }
     
     // Add a subtle glow/blur effect based on overall intensity
-    visualizerCtx.shadowBlur = rms / 20; // Más sensible al RMS
+    visualizerCtx.shadowBlur = rms / 10; // Más sensible al RMS
     visualizerCtx.shadowColor = `hsla(${hue}, 100%, 70%, 0.7)`;
 
     for (let i = 1; i <= numCircles; i++) {
         const radius = (i / numCircles) * maxRadius;
-        const alpha = 1 - (i / numCircles); // Fades out further circles
+        const alpha = 1 - (i / numCircles); // Se desvanece en círculos más lejanos
 
         visualizerCtx.strokeStyle = `hsla(${hue}, 100%, 60%, ${alpha * 0.8})`;
         visualizerCtx.fillStyle = `hsla(${hue}, 100%, 50%, ${alpha * 0.1})`;
@@ -333,7 +330,7 @@ function drawConcentricWavesVisualization() {
         visualizerCtx.stroke();
         visualizerCtx.fill();
     }
-    visualizerCtx.shadowBlur = 0; // Reset shadow for other drawings
+    visualizerCtx.shadowBlur = 0; // Resetear sombra para otros dibujos
 }
 
 
@@ -1174,8 +1171,7 @@ function setupEventListeners() {
   document.addEventListener('keydown', onKeyDown);
   document.addEventListener('keyup', onKeyUp);
 
-  document.getElementById('save-patch-btn').addEventListener('click', savePatch);
-  document.getElementById('load-patch-btn').addEventListener('click', loadPatch);
+  
 
   document.querySelectorAll('#context-menu .context-menu-item').forEach(item => {
     item.addEventListener('click', async (e) => {
@@ -1210,6 +1206,13 @@ function setupEventListeners() {
   const visualizerModule = document.getElementById('visualizer-module');
   const visualizerHeader = document.querySelector('#visualizer-module .module-header');
   
+  // Explicitly set initial position and size in JavaScript to override any conflicting CSS or previous state
+  visualizerModule.style.left = '10px';
+  visualizerModule.style.top = '60px';
+  visualizerModule.style.width = '200px';
+  visualizerModule.style.height = '200px';
+  visualizerModule.style.transform = 'none'; // Ensure no conflicting transform
+
   visualizerHeader.addEventListener('mousedown', (e) => {
     isDraggingVisualizer = true;
     visualizerDragOffset.x = e.clientX - visualizerHeader.parentElement.offsetLeft;

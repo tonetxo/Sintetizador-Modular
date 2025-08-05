@@ -94,9 +94,9 @@ body {
 }
 
 #visualizer-canvas {
-    width: calc(100% - 20px);
-    height: calc(100% - 35px);
+    width: 100%; /* Ocupa todo el ancho del contenedor */
+    height: calc(100% - 30px); /* Ajustado para el espacio restante después del encabezado */
     background-color: #1a1a1a;
     border-radius: 3px;
-    margin: 0 10px 10px 10px;
+    /* Eliminado el margin para un mejor ajuste */
 }
