@@ -1,0 +1,102 @@
+{
+  "modules": [
+    {
+      "id": "keyboard-main",
+      "type": "Keyboard",
+      "x": 53,
+      "y": 125,
+      "isPermanent": true,
+      "portamentoValue": 0.2,
+      "octave": 4
+    },
+    {
+      "id": "output-main",
+      "type": "Output",
+      "x": 750,
+      "y": 50,
+      "isPermanent": true
+    },
+    {
+      "id": "vco-1754419725142",
+      "type": "VCO",
+      "x": 716,
+      "y": 219,
+      "frequency": 440,
+      "detune": 0,
+      "waveform": "sawtooth",
+      "pulseWidth": 0.5
+    },
+    {
+      "id": "vca-1754419728310",
+      "type": "VCA",
+      "x": 1320,
+      "y": 172
+    },
+    {
+      "id": "adsr-1754419738278",
+      "type": "ADSR",
+      "x": 1052,
+      "y": 438,
+      "attack": 0.01,
+      "decay": 0.1,
+      "sustain": 0.8,
+      "release": 0.2
+    },
+    {
+      "id": "arpeggiator-1754419746358",
+      "type": "Arpeggiator",
+      "x": 404,
+      "y": 296,
+      "tempo": 20,
+      "mode": 0,
+      "octaveRange": 0,
+      "gateLength": 0.8,
+      "hold": true,
+      "running": true
+    }
+  ],
+  "connections": [
+    {
+      "fromId": "vco-1754419725142",
+      "fromConnector": "Out",
+      "toId": "vca-1754419728310",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "vca-1754419728310",
+      "fromConnector": "audio",
+      "toId": "output-main",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "arpeggiator-1754419746358",
+      "toConnector": "GATE_IN"
+    },
+    {
+      "fromId": "arpeggiator-1754419746358",
+      "fromConnector": "TENSION",
+      "toId": "vco-1754419725142",
+      "toConnector": "1v/oct"
+    },
+    {
+      "fromId": "arpeggiator-1754419746358",
+      "fromConnector": "DISPARO",
+      "toId": "adsr-1754419738278",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "adsr-1754419738278",
+      "fromConnector": "CV",
+      "toId": "vca-1754419728310",
+      "toConnector": "CV 1"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "TENSION",
+      "toId": "arpeggiator-1754419746358",
+      "toConnector": "CV_IN"
+    }
+  ]
+}

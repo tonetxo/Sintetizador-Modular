@@ -30,17 +30,17 @@ export class LFO {
 
     async init() {
         this.oscillator = audioContext.createOscillator();
-        this.oscillator.frequency.setValueAtTime(8, audioContext.currentTime);
+        this.oscillator.frequency.setValueAtTime(this.initialState.rate !== undefined ? this.initialState.rate : 8, audioContext.currentTime);
         
         this.noise = createNoiseGenerator(audioContext);
 
         this.lfoDepthGain = audioContext.createGain();
-        this.lfoDepthGain.gain.value = 3;
+        this.lfoDepthGain.gain.setValueAtTime(this.initialState.depth !== undefined ? this.initialState.depth : 3, audioContext.currentTime);
 
         this.attackEnvelope = audioContext.createGain();
         this.attackEnvelope.gain.value = 0;
 
-        this.attackTimeConstant = this.initialState.attack || 0.1; 
+        this.attackTimeConstant = this.initialState.attack !== undefined ? this.initialState.attack : 0.1; 
         
         try {
             this.gateProcessorNode = new AudioWorkletNode(audioContext, 'gate-processor');
@@ -67,6 +67,12 @@ export class LFO {
         this.bypassNode = audioContext.createGain();
         this.bypassNode.gain.value = this.isBypassed ? 0 : 1;
 
+        // Workaround para mantener el nodo LFO activo y evitar que sea eliminado por el recolector de basura
+        const dummyGain = audioContext.createGain();
+        dummyGain.gain.value = 0;
+        this.bypassNode.connect(dummyGain);
+        dummyGain.connect(audioContext.destination);
+
         this.oscillator.connect(this.lfoDepthGain);
         this.noise.connect(this.lfoDepthGain);
         this.lfoDepthGain.connect(this.attackEnvelope);
@@ -89,9 +95,7 @@ export class LFO {
             'SALIDA': { x: this.width, y: this.height / 2, type: 'cv', source: this.bypassNode, orientation: 'horizontal' }
         };
 
-        if (Object.keys(this.initialState).length > 0) {
-            this.setState(this.initialState);
-        }
+        
     }
 
 

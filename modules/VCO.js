@@ -65,7 +65,6 @@ export class VCO {
     updateParams() {
         if (!this.workletNode) return;
         const waveformIndex = this.waveforms.indexOf(this.params.waveform);
-        console.log(`[VCO-${this.id}] updateParams - waveform: ${this.params.waveform}, index: ${waveformIndex}`);
         
         this.frequencyParam.setTargetAtTime(this.params.frequency, audioContext.currentTime, 0.01);
         this.detuneParam.setTargetAtTime(this.params.detune, audioContext.currentTime, 0.01);
@@ -154,11 +153,12 @@ export class VCO {
         }
         const angle = startAngle + normalizedValue * angleRange;
         
-        // Visual feedback for active knob
+        // Visual feedback for active knob (glow)
         if (isActive) {
             ctx.beginPath();
             ctx.arc(x, y, knobRadius + 4, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(74, 144, 226, 0.5)';
+            // Usamos un amarillo semitransparente para el "glow"
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
             ctx.fill();
         }
 
@@ -167,7 +167,16 @@ export class VCO {
         const displayValue = paramName === 'frequency' ? `${value.toFixed(1)} Hz` : (paramName === 'pulseWidth' ? `${(value * 100).toFixed(0)}%` : `${value.toFixed(0)}c`);
         ctx.fillText(displayValue, x, y + knobRadius + 12);
         ctx.strokeStyle = '#555'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, knobRadius, startAngle, startAngle + angleRange); ctx.stroke();
-        ctx.strokeStyle = '#4a90e2'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(angle) * knobRadius, y + Math.sin(angle) * knobRadius); ctx.stroke();
+        
+        // --- CAMBIO: Feedback visual del marcador ---
+        // Se cambia el color del marcador si el knob está activo.
+        ctx.strokeStyle = isActive ? '#ffffaa' : '#4a90e2';
+        
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(angle) * knobRadius, y + Math.sin(angle) * knobRadius);
+        ctx.stroke();
+
         this.hotspots[paramName] = { x: x - knobRadius, y: y - knobRadius, width: knobRadius * 2, height: knobRadius * 2, min, max, type: 'knob' };
     }
     
@@ -280,6 +289,19 @@ export class VCO {
             } else {
                 const sensitivity = (hotspot.max - hotspot.min) / 128;
                 newValue = this.dragStart.value + dy * sensitivity;
+            }
+            
+            // --- CAMBIO: Lógica de "Snap" ---
+            const snapPoints = { frequency: 440, detune: 0, pulseWidth: 0.5 };
+            const snapThresholds = { frequency: 10, detune: 5, pulseWidth: 0.05 };
+            
+            const snapValue = snapPoints[this.activeControl];
+            const threshold = snapThresholds[this.activeControl];
+
+            if (snapValue !== undefined && threshold !== undefined) {
+                if (Math.abs(newValue - snapValue) < threshold) {
+                    newValue = snapValue;
+                }
             }
             
             this.params[this.activeControl] = Math.max(hotspot.min, Math.min(hotspot.max, newValue));

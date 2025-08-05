@@ -9,32 +9,36 @@ class ADSRProcessor extends AudioWorkletProcessor {
         ];
     }
 
-    constructor() {
-        super();
+    constructor(options) {
+        super(options);
         this.phase = 'idle';
         this.value = 0.0;
         this.gate = false;
     }
 
-    // Calcula el coeficiente para una curva exponencial que se acerca a un objetivo.
-    // Un valor de 'targetRatio' más pequeño hace que la curva se acerque más al valor final.
     calculateCoefficient(timeInSeconds, targetRatio = 0.001) {
-        // Evita la división por cero si el tiempo es instantáneo.
         if (timeInSeconds <= 0) return 0.0;
         return Math.exp(-Math.log(1 / targetRatio) / (timeInSeconds * sampleRate));
     }
 
     process(inputs, outputs, parameters) {
-        const output = outputs[0];
-        const gateInput = inputs[0];
+        const outputChannel = outputs[0]?.[0];
+        if (!outputChannel) {
+            return true;
+        }
 
-        const attackValues = parameters.attack;
-        const decayValues = parameters.decay;
-        const sustainValues = parameters.sustain;
-        const releaseValues = parameters.release;
+        const gateChannel = inputs[0]?.[0];
 
-        for (let i = 0; i < output[0].length; i++) {
-            const gateValue = gateInput[0] ? gateInput[0][i] : 0;
+        // --- CAMBIO: Acceso seguro a todos los parámetros ---
+        // Si un parámetro es `undefined`, le asignamos un array con su valor por defecto.
+        // Esto previene el error si .process() se ejecuta antes de que los parámetros estén listos.
+        const attackValues = parameters.attack ?? [0.01];
+        const decayValues = parameters.decay ?? [0.1];
+        const sustainValues = parameters.sustain ?? [0.8];
+        const releaseValues = parameters.release ?? [0.2];
+
+        for (let i = 0; i < outputChannel.length; i++) {
+            const gateValue = gateChannel?.[i] ?? 0;
 
             if (gateValue > 0.5 && !this.gate) {
                 this.gate = true;
@@ -43,7 +47,8 @@ class ADSRProcessor extends AudioWorkletProcessor {
                 this.gate = false;
                 this.phase = 'release';
             }
-
+            
+            // Esta línea ahora es segura porque `sustainValues` siempre será un array.
             const sustainLevel = sustainValues.length > 1 ? sustainValues[i] : sustainValues[0];
 
             switch (this.phase) {
@@ -86,7 +91,7 @@ class ADSRProcessor extends AudioWorkletProcessor {
                     break;
                 }
             }
-            output[0][i] = this.value;
+            outputChannel[i] = this.value;
         }
         return true;
     }

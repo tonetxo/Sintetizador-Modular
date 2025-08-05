@@ -23,6 +23,7 @@ import { AudioPlayer } from './modules/AudioPlayer.js';
 import { Vocoder } from './modules/Vocoder.js';
 import { MathModule } from './modules/Math.js';
 import { NoiseGenerator } from './modules/NoiseGenerator.js';
+import { Arpeggiator } from './modules/Arpeggiator.js'; // Added Arpeggiator
 
 // DOM Elements
 const canvas = document.getElementById('synth-canvas');
@@ -40,7 +41,8 @@ const MODULE_CLASSES = {
   VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod,
   SampleAndHold, Sequencer, Osciloscopio, Delay,
   Compressor, Reverb, Keyboard, Math: MathModule,
-  Microphone, AudioPlayer, Vocoder, NoiseGenerator
+  Microphone, AudioPlayer, Vocoder, NoiseGenerator,
+  Arpeggiator // Added Arpeggiator
 };
 
 let modules = [];
@@ -356,20 +358,35 @@ function getConnectorPosition(module, connector) {
 // Audio Connection Functions
 function connectNodes(sourceConnector, destConnector) {
   try {
+    console.log('[renderer] connectNodes called. destConnector:', destConnector);
     const sourceNode = sourceConnector.source;
+
+    if (!sourceNode) {
+      console.error("Invalid source node for connection:", { sourceConnector, destConnector });
+      return false;
+    }
+
+    // Prioritize custom onConnect handler
+    if (destConnector.onConnect && typeof destConnector.onConnect === 'function') {
+      destConnector.onConnect(sourceNode);
+      return true;
+    }
+
+    // Fallback to direct node/param connection
     const destTargets = Array.isArray(destConnector.target) ? destConnector.target : [destConnector.target];
 
-    if (!sourceNode || !destTargets || destTargets.length === 0) {
-      console.error("Invalid connection attempt:", { sourceConnector, destConnector });
+    // Ensure destTargets is an array of valid nodes/params
+    const validDestTargets = destTargets.filter(node => node !== null && node !== undefined);
+
+    if (validDestTargets.length === 0) {
+      console.error("Invalid or empty destination target for connection:", { sourceConnector, destConnector });
       return false;
     }
 
     const outputIndex = sourceConnector.port || 0;
 
-    destTargets.forEach(destNode => {
-      if (!destNode) return;
-      const inputIndex = destConnector.inputIndex || 0;
-
+    validDestTargets.forEach(destNode => {
+      const inputIndex = destConnector.inputIndex || 0; // Define inputIndex here
       try {
         if (destNode instanceof AudioParam) {
           sourceNode.connect(destNode, outputIndex);
@@ -391,16 +408,33 @@ function connectNodes(sourceConnector, destConnector) {
 function disconnectNodes(sourceConnector, destConnector) {
   try {
     const sourceNode = sourceConnector.source;
+
+    if (!sourceNode) {
+      console.warn("Invalid source node for disconnection:", { sourceConnector, destConnector });
+      return;
+    }
+
+    // Prioritize custom onDisconnect handler
+    if (destConnector.onDisconnect && typeof destConnector.onDisconnect === 'function') {
+      destConnector.onDisconnect(sourceNode);
+      return;
+    }
+
+    // Fallback to direct node/param disconnection
     const destTargets = Array.isArray(destConnector.target) ? destConnector.target : [destConnector.target];
 
-    if (!sourceNode || !destTargets || destTargets.length === 0) return;
+    // Ensure destTargets is an array of valid nodes/params
+    const validDestTargets = destTargets.filter(node => node !== null && node !== undefined);
+
+    if (validDestTargets.length === 0) {
+        // No valid targets to disconnect from, might be a custom connection handled by onDisconnect
+        return;
+    }
 
     const outputIndex = sourceConnector.port || 0;
 
-    destTargets.forEach(destNode => {
-      if (!destNode) return;
-      const inputIndex = destConnector.inputIndex || 0;
-
+    validDestTargets.forEach(destNode => {
+      const inputIndex = destConnector.inputIndex || 0; // Define inputIndex here
       try {
         if (destNode instanceof AudioParam) {
           sourceNode.disconnect(destNode, outputIndex);

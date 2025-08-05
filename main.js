@@ -15,7 +15,7 @@ function createDecoderWindow() {
         }
     });
     decoderWindow.loadFile('decoder.html');
-    // decoderWindow.webContents.openDevTools(); // Habilitar DevTools para depuración
+    decoderWindow.webContents.openDevTools(); // Habilitar DevTools para depuración
     decoderWindow.on('closed', () => { decoderWindow = null; });
 }
 
