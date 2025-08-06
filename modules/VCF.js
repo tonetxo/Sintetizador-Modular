@@ -10,6 +10,13 @@ export class VCF {
         this.height = 300; // Máis alto
         this.type = 'VCF';
 
+        this.filterTypes = ['lowpass', 'highpass', 'bandpass', 'notch'];
+        let initialFilterIndex = this.filterTypes.indexOf(initialState.filterType);
+        if (initialFilterIndex === -1) {
+            initialFilterIndex = 0; // Default to lowpass if not found
+        }
+        this.currentFilterIndex = initialFilterIndex;
+
         this.bypassed = initialState.bypassed || false;
 
         this.inputGain = audioContext.createGain();
@@ -17,9 +24,9 @@ export class VCF {
         this.outputGain = audioContext.createGain();
 
         this.filter = audioContext.createBiquadFilter();
-        this.filter.type = 'lowpass';
-        this.filter.frequency.setValueAtTime(1000, audioContext.currentTime);
-        this.filter.Q.setValueAtTime(1, audioContext.currentTime);
+        this.filter.type = this.filterTypes[this.currentFilterIndex];
+        this.filter.frequency.setValueAtTime(initialState.cutoff || 1000, audioContext.currentTime);
+        this.filter.Q.setValueAtTime(initialState.resonance || 1, audioContext.currentTime);
 
         // Create intermediate GainNodes for modulation depth control
         this.frequencyModulator = audioContext.createGain();
@@ -94,12 +101,66 @@ export class VCF {
         this.drawVerticalSlider(ctx, 'cutoff', 40, 40, 220, 20, 20000, this.filter.frequency.value, 'Hz', true);
         this.drawVerticalSlider(ctx, 'q', this.width - 40, 40, 220, 0, 30, this.filter.Q.value, false);
 
+        // Dibuja el símbolo del filtro
+        this.drawFilterSymbol(ctx, this.width / 2, this.height / 2 + 20, 30);
+
         ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
     }
 
+    drawFilterSymbol(ctx, cx, cy, size) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.strokeStyle = '#E0E0E0';
+        ctx.lineWidth = 2;
+
+        const halfSize = size / 2;
+
+        switch (this.filterTypes[this.currentFilterIndex]) {
+            case 'lowpass':
+                ctx.beginPath();
+                ctx.moveTo(-halfSize, halfSize);
+                ctx.lineTo(-halfSize, -halfSize);
+                ctx.lineTo(halfSize, -halfSize);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(halfSize, -halfSize, 5, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            case 'highpass':
+                ctx.beginPath();
+                ctx.moveTo(-halfSize, -halfSize);
+                ctx.lineTo(halfSize, -halfSize);
+                ctx.lineTo(halfSize, halfSize);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(-halfSize, halfSize, 5, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            case 'bandpass':
+                ctx.beginPath();
+                ctx.moveTo(-halfSize, halfSize);
+                ctx.lineTo(-halfSize, -halfSize);
+                ctx.lineTo(0, halfSize);
+                ctx.lineTo(halfSize, -halfSize);
+                ctx.lineTo(halfSize, halfSize);
+                ctx.stroke();
+                break;
+            case 'notch':
+                ctx.beginPath();
+                ctx.moveTo(-halfSize, -halfSize);
+                ctx.lineTo(-halfSize, halfSize);
+                ctx.moveTo(halfSize, -halfSize);
+                ctx.lineTo(halfSize, halfSize);
+                ctx.moveTo(-halfSize, 0);
+                ctx.lineTo(halfSize, 0);
+                ctx.stroke();
+                break;
+        }
+        ctx.restore();
+    }
+
     drawVerticalSlider(ctx, paramName, x, y, height, minVal, maxVal, currentValue, unit, isLogarithmic = false) {
-        const sliderWidth = 10;
         const knobRadius = 8;
 
         // Etiqueta
@@ -195,6 +256,15 @@ export class VCF {
 
     checkInteraction(pos) {
         const localPos = { x: pos.x - this.x, y: pos.y - this.y };
+        // Check for filter type click area
+        const symbolCenterX = this.width / 2;
+        const symbolCenterY = this.height / 2 + 20;
+        const clickRadius = 25; // Adjust as needed
+        if (Math.hypot(localPos.x - symbolCenterX, localPos.y - symbolCenterY) < clickRadius) {
+            this.handleClick();
+            return true;
+        }
+
         for (const [param, rect] of Object.entries(this.paramHotspots)) {
             if (localPos.x >= rect.x && localPos.x <= rect.x + rect.width &&
                 localPos.y >= rect.y && localPos.y <= rect.y + rect.height) {
@@ -203,6 +273,11 @@ export class VCF {
             }
         }
         return false;
+    }
+
+    handleClick() {
+        this.currentFilterIndex = (this.currentFilterIndex + 1) % this.filterTypes.length;
+        this.filter.type = this.filterTypes[this.currentFilterIndex];
     }
 
     handleDragInteraction(worldPos) {
@@ -268,7 +343,7 @@ export class VCF {
             x: this.x, y: this.y,
             cutoff: this.filter.frequency.value,
             resonance: this.filter.Q.value,
-            filterType: this.filter.type,
+            filterType: this.filterTypes[this.currentFilterIndex],
             bypassed: this.bypassed
         };
     }
@@ -278,7 +353,8 @@ export class VCF {
         this.x = state.x; this.y = state.y;
         this.filter.frequency.setValueAtTime(state.cutoff, audioContext.currentTime);
         this.filter.Q.setValueAtTime(state.resonance, audioContext.currentTime);
-        this.filter.type = state.filterType;
+        this.currentFilterIndex = this.filterTypes.indexOf(state.filterType) !== -1 ? this.filterTypes.indexOf(state.filterType) : 0;
+        this.filter.type = this.filterTypes[this.currentFilterIndex];
         this.bypassed = state.bypassed || false;
         this.updateBypassState();
     }

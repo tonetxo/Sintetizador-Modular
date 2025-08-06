@@ -1,4 +1,3 @@
-/* global currentTime */
 // worklets/cv-to-midi-processor.js
 
 class CvToMidiProcessor extends AudioWorkletProcessor {

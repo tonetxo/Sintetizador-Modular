@@ -1,8 +1,9 @@
 const audioContext = new AudioContext();
 
 window.decoderAPI.onDecodeRequest((event, { audioData, moduleId }) => {
-    console.log(`[Decoder] Received decode request for module ${moduleId}. Data size: ${audioData.byteLength} bytes`);
-    const arrayBuffer = audioData.buffer.slice(audioData.byteOffset, audioData.byteOffset + audioData.byteLength);
+    console.log(`[Decoder] Received decode request for module ${moduleId}. Data size: ${audioData.length} bytes`);
+    // The received data is a Uint8Array, we need to get its underlying ArrayBuffer.
+    const arrayBuffer = audioData.buffer.slice(audioData.byteOffset, audioData.byteOffset + audioData.length);
 
     audioContext.decodeAudioData(arrayBuffer)
         .then(audioBuffer => {
@@ -23,3 +24,7 @@ window.decoderAPI.onDecodeRequest((event, { audioData, moduleId }) => {
             window.decoderAPI.sendDecodeResult({ success: false, moduleId, error: error.message });
         });
 });
+
+// Notify the main process that the decoder is ready to work.
+window.decoderAPI.sendDecoderReady();
+console.log('[Decoder] Decoder is ready and has sent the ready signal.');

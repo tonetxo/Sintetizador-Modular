@@ -1,7 +1,7 @@
 import { audioContext } from './AudioContext.js';
 
 export class Vocoder {
-    constructor(x, y, id = null, initialState = {}) {
+    constructor(x, y, id = null) {
         this.id = id || `vocoder-${Date.now()}`;
         this.x = x;
         this.y = y;

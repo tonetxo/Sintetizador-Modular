@@ -1,9 +1,13 @@
+// main.js
 const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
 let mainWindow;
 let decoderWindow;
+
+// Promise to resolve when the decoder window is ready
+let decoderReadyPromise = null;
 
 function createDecoderWindow() {
     decoderWindow = new BrowserWindow({
@@ -15,8 +19,16 @@ function createDecoderWindow() {
         }
     });
     decoderWindow.loadFile('decoder.html');
-    decoderWindow.webContents.openDevTools(); // Habilitar DevTools para depuración
+    decoderWindow.webContents.openDevTools();
     decoderWindow.on('closed', () => { decoderWindow = null; });
+
+    // Setup the promise that resolves when the decoder is ready
+    decoderReadyPromise = new Promise(resolve => {
+        ipcMain.once('decoder-ready', () => {
+            console.log('[Main] Decoder window is ready.');
+            resolve();
+        });
+    });
 }
 
 function createWindow() {
@@ -31,7 +43,6 @@ function createWindow() {
     backgroundColor: '#333333'
   });
 
-  // mainWindow.loadFile('index.html'); // Moved to app.whenReady()
   mainWindow.webContents.openDevTools();
 
   mainWindow.on('closed', () => {
@@ -47,47 +58,49 @@ function createWindow() {
       {
         label: 'File',
         submenu: [
-          {
-            label: 'Load Patch',
-            accelerator: 'CmdOrCtrl+L',
-            click: () => { mainWindow.webContents.send('request-load-patch'); }
-          },
-          {
-            label: 'Save Patch',
-            accelerator: 'CmdOrCtrl+S',
-            click: () => { mainWindow.webContents.send('request-save-patch'); }
-          },
+          { label: 'Load Patch', accelerator: 'CmdOrCtrl+L', click: () => { mainWindow.webContents.send('request-load-patch'); } },
+          { label: 'Save Patch', accelerator: 'CmdOrCtrl+S', click: () => { mainWindow.webContents.send('request-save-patch'); } },
           { type: 'separator' },
           { role: 'quit' }
         ]
       },
+      { label: 'Edit', submenu: [ { role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' } ] },
+      { label: 'View', submenu: [ { role: 'reload' }, { role: 'forcereload' }, { role: 'toggledevtools' }, { type: 'separator' }, { role: 'resetzoom' }, { role: 'zoomin' }, { role: 'zoomout' }, { type: 'separator' }, { role: 'togglefullscreen' } ] },
       {
-        label: 'Edit',
+        label: 'Help',
         submenu: [
-          { role: 'undo' },
-          { role: 'redo' },
-          { type: 'separator' },
-          { role: 'cut' },
-          { role: 'copy' },
-          { role: 'paste' },
-        ]
-      },
-      {
-        label: 'View',
-        submenu: [
-          { role: 'reload' },
-          { role: 'forcereload' },
-          { role: 'toggledevtools' },
-          { type: 'separator' },
-          { role: 'resetzoom' },
-          { role: 'zoomin' },
-          { role: 'zoomout' },
-          { type: 'separator' },
-          { role: 'togglefullscreen' }
+          {
+            label: 'Plantillas',
+            submenu: [
+              { label: 'Sinte 1', click: () => { mainWindow.webContents.send('load-template-patch', 'sinte_1.json'); } },
+              { label: 'Sinte 2', click: () => { mainWindow.webContents.send('load-template-patch', 'sinte_2.json'); } },
+              { label: 'Arpegios', click: () => { mainWindow.webContents.send('load-template-patch', 'arpegios.json'); } }
+            ]
+          },
+          {
+            label: 'Versión',
+            click: () => {
+              const packageJson = require('./package.json');
+              dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: 'Versión',
+                message: `Versión: ${packageJson.version}`
+              });
+            }
+          },
+          {
+            label: 'Ayuda',
+            click: () => {
+              dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: 'Ayuda',
+                message: 'Crea módulos haciendo clic derecho en el lienzo. Conecta los módulos arrastrando desde las salidas a las entradas. Elimina módulos o conexiones seleccionándolos y pulsando la tecla Supr.'
+              });
+            }
+          }
         ]
       }
     ];
-
     const menu = Menu.buildFromTemplate(menuTemplate);
     Menu.setApplicationMenu(menu);
   });
@@ -101,20 +114,39 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('decode-audio-file', (event, { filePath, moduleId }) => {
-    try {
-        const audioData = fs.readFileSync(filePath);
-        if (decoderWindow) {
-            decoderWindow.webContents.send('decode-request', { audioData, moduleId });
-        }
-    } catch (error) {
-        mainWindow.webContents.send('decode-complete', { success: false, moduleId, error: error.message });
-    }
-  });
+    return new Promise((resolve, reject) => {
+        decoderReadyPromise.then(() => {
+            try {
+                if (!decoderWindow) {
+                    throw new Error('La ventana de decodificación no está disponible.');
+                }
 
-  ipcMain.on('decode-result', (event, result) => {
-    if (mainWindow) {
-        mainWindow.webContents.send('decode-complete', result);
-    }
+                const onDecodeResult = (event, result) => {
+                    if (result.moduleId === moduleId) {
+                        ipcMain.removeListener('decode-result', onDecodeResult);
+                        if (result.success) {
+                            resolve(result);
+                        } else {
+                            reject(new Error(result.error));
+                        }
+                    }
+                };
+
+                ipcMain.on('decode-result', onDecodeResult);
+
+                const audioData = fs.readFileSync(filePath);
+                // Send the raw buffer; Electron will handle the transfer efficiently.
+                decoderWindow.webContents.send('decode-request', {
+                    audioData: audioData,
+                    moduleId
+                });
+
+            } catch (error) {
+                console.error(`[Main] Error en handle 'decode-audio-file':`, error);
+                reject(error);
+            }
+        }).catch(reject); // Captura errores de la promesa decoderReadyPromise
+    });
   });
 
   ipcMain.handle('save-patch', async (event, patch) => {
@@ -151,7 +183,6 @@ app.whenReady().then(() => {
     fs.appendFileSync(logFilePath, `[${new Date().toISOString()}] ${message}\n`);
   });
 
-  // Load the main window content AFTER all IPC handlers are registered
   mainWindow.loadFile('index.html');
 });
 

@@ -2,7 +2,7 @@
 import { audioContext } from './AudioContext.js';
 
 export class VCA {
-    constructor(x, y, id = null, initialState = {}) {
+    constructor(x, y, id = null) {
         this.id = id || `vca-${Date.now()}`;
         this.x = x;
         this.y = y;

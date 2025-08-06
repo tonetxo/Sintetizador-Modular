@@ -240,7 +240,7 @@ export class LFO {
             this.workletNode.port.postMessage({ type: 'waveform', value: workletWfIndex });
         }
     }
-    drawHorizontalSlider(ctx, paramName, x, y, width, minVal, maxVal, currentValue, isLogarithmic) {
+    drawHorizontalSlider(ctx, paramName, x, y, width, minVal, maxVal, currentValue) {
         const knobRadius = 8;
         ctx.strokeStyle = '#555';
         ctx.lineWidth = 4;

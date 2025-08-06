@@ -2,13 +2,29 @@
 
 class MathProcessor extends AudioWorkletProcessor {
     static get parameterDescriptors() {
-        return [{
-            name: 'operation',
-            defaultValue: 0, // 0: Add, 1: Subtract, 2: Multiply, 3: Min, 4: Max
-            minValue: 0,
-            maxValue: 4,
-            automationRate: 'k-rate' // Puede cambiar en cualquier momento, pero no por muestra
-        }];
+        return [
+            {
+                name: 'operation',
+                defaultValue: 0, // 0: Add, 1: Subtract, 2: Multiply, 3: Min, 4: Max
+                minValue: 0,
+                maxValue: 4,
+                automationRate: 'k-rate'
+            },
+            {
+                name: 'levelA',
+                defaultValue: 1,
+                minValue: -2,
+                maxValue: 2,
+                automationRate: 'a-rate'
+            },
+            {
+                name: 'levelB',
+                defaultValue: 1,
+                minValue: -2,
+                maxValue: 2,
+                automationRate: 'a-rate'
+            }
+        ];
     }
 
     process(inputs, outputs, parameters) {
@@ -16,17 +32,22 @@ class MathProcessor extends AudioWorkletProcessor {
         const inputB = inputs[1];
         const output = outputs[0];
         const operation = parameters.operation[0];
+        const levelA = parameters.levelA;
+        const levelB = parameters.levelB;
 
         // Iterar sobre cada canal (aunque normalmente usaremos mono)
         for (let channel = 0; channel < output.length; ++channel) {
             const outputChannel = output[channel];
-            const inputChannelA = inputA[channel] || inputA[0]; // Fallback al primer canal si no hay suficientes
+            const inputChannelA = inputA[channel] || inputA[0];
             const inputChannelB = inputB[channel] || inputB[0];
 
             // Iterar sobre cada muestra en el bloque de procesamiento
             for (let i = 0; i < outputChannel.length; ++i) {
-                const a = inputChannelA ? inputChannelA[i] : 0;
-                const b = inputChannelB ? inputChannelB[i] : 0;
+                const currentLevelA = levelA.length > 1 ? levelA[i] : levelA[0];
+                const currentLevelB = levelB.length > 1 ? levelB[i] : levelB[0];
+
+                const a = (inputChannelA ? inputChannelA[i] : 0) * currentLevelA;
+                const b = (inputChannelB ? inputChannelB[i] : 0) * currentLevelB;
 
                 switch (operation) {
                     case 0: // Suma (A + B)

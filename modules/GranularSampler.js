@@ -184,7 +184,7 @@ export class GranularSampler {
         this.hotspots[paramName] = { x: x - knobRadius, y: y - knobRadius, width: knobRadius * 2, height: knobRadius * 2, min, max, type: 'knob' };
     }
 
-    drawConnectors(ctx, hovered) {
+    drawConnectors(ctx) {
         if (!this.inputs || !this.outputs) return;
         const connectorRadius = 8;
         ctx.font = '10px Arial';

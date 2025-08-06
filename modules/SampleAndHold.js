@@ -5,7 +5,7 @@ const workletPromise = audioContext.audioWorklet.addModule('worklets/sample-and-
     .catch(e => console.error('Error loading S&H AudioWorklet:', e));
 
 export class SampleAndHold {
-    constructor(x, y, id = null, initialState = {}) {
+    constructor(x, y, id = null) {
         this.id = id || `sah-${Date.now()}`;
         this.x = x;
         this.y = y;

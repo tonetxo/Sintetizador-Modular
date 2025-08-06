@@ -5,7 +5,7 @@ class GateProcessor extends AudioWorkletProcessor {
         this._lastGateValue = 0;
     }
 
-    process(inputs, outputs, parameters) {
+    process(inputs) {
         const input = inputs[0];
         const inputChannel = input[0];
 

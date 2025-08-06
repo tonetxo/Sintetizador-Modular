@@ -2,7 +2,7 @@
 import { audioContext } from './AudioContext.js';
 
 export class Mixer {
-    constructor(x, y, id = null, initialState = {}) {
+    constructor(x, y, id = null) {
         this.id = id || `mixer-${Date.now()}`;
         this.x = x;
         this.y = y;

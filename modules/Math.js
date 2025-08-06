@@ -11,13 +11,17 @@ export class MathModule {
         this.x = x;
         this.y = y;
         this.width = 120;
-        this.height = 150;
+        this.height = 220; // Aumentar altura
 
         this.operations = ['A + B', 'A - B', 'A × B', 'MIN', 'MAX'];
         this.currentOperationIndex = initialState.operation || 0;
+        this.levelA = initialState.levelA || 1;
+        this.levelB = initialState.levelB || 1;
         
         this.node = null;
         this.isReady = false;
+        this.activeControl = null;
+        this.paramHotspots = {};
 
         this.inputs = {
             'A': { x: 0, y: 40, type: 'cv', target: null, inputIndex: 0, orientation: 'horizontal' },
@@ -31,9 +35,15 @@ export class MathModule {
             this.node = new AudioWorkletNode(audioContext, 'math-processor', { 
                 numberOfInputs: 2,
                 numberOfOutputs: 1,
-                outputChannelCount: [1]
+                outputChannelCount: [1],
+                parameterData: {
+                    levelA: this.levelA,
+                    levelB: this.levelB
+                }
             });
             this.operationParam = this.node.parameters.get('operation');
+            this.levelAParam = this.node.parameters.get('levelA');
+            this.levelBParam = this.node.parameters.get('levelB');
             this.setOperation(this.currentOperationIndex);
             
             this.inputs['A'].target = this.node;
@@ -76,8 +86,9 @@ export class MathModule {
         ctx.fillText('MATES', this.width / 2, 22);
 
         if (this.isReady) {
-            ctx.font = 'bold 20px Arial';
-            ctx.fillText(this.operations[this.currentOperationIndex], this.width / 2, this.height / 2 + 8);
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText(this.operations[this.currentOperationIndex], this.width / 2, this.height / 2 - 10);
+            this.drawKnobs(ctx);
         } else {
             ctx.font = '12px Arial';
             ctx.fillStyle = '#ff80ab';
@@ -86,6 +97,41 @@ export class MathModule {
 
         ctx.restore();
         this.drawConnectors(ctx, hoveredConnectorInfo);
+    }
+
+    drawKnobs(ctx) {
+        const knobRadius = 15;
+        const yPos = this.height - 45;
+        this.drawKnob(ctx, 'levelA', 'Nivel A', this.width / 4, yPos, knobRadius, this.levelA);
+        this.drawKnob(ctx, 'levelB', 'Nivel B', this.width * 3 / 4, yPos, knobRadius, this.levelB);
+    }
+
+    drawKnob(ctx, paramName, label, x, y, radius, value) {
+        const angleRange = Math.PI * 1.5;
+        const startAngle = Math.PI * 0.75;
+        const normalizedValue = (value + 2) / 4; // Normalizar de -2,2 a 0,1
+        const angle = startAngle + normalizedValue * angleRange;
+
+        ctx.font = '10px Arial';
+        ctx.fillStyle = '#E0E0E0';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, x, y - radius - 5);
+        ctx.fillText(value.toFixed(2), x, y + radius + 12);
+
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, startAngle, startAngle + angleRange);
+        ctx.stroke();
+
+        ctx.strokeStyle = this.activeControl === paramName ? '#aaffff' : '#4a90e2';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
+        ctx.stroke();
+
+        this.paramHotspots[paramName] = { x: x - radius, y: y - radius, width: radius * 2, height: radius * 2 };
     }
 
     drawConnectors(ctx, hovered) {
@@ -127,12 +173,46 @@ export class MathModule {
         const localX = x - this.x;
         const localY = y - this.y;
         // Área de clic en el centro del módulo
-        if (localX > 20 && localX < this.width - 20 && localY > 40 && localY < this.height - 40) {
+        if (localX > 20 && localX < this.width - 20 && localY > 40 && localY < this.height - 80) {
             const newIndex = (this.currentOperationIndex + 1) % this.operations.length;
             this.setOperation(newIndex);
             return true;
         }
         return false;
+    }
+
+    checkInteraction(pos) {
+        const localPos = { x: pos.x - this.x, y: pos.y - this.y };
+        for (const [param, rect] of Object.entries(this.paramHotspots)) {
+            if (localPos.x >= rect.x && localPos.x <= rect.x + rect.width &&
+                localPos.y >= rect.y && localPos.y <= rect.y + rect.height) {
+                this.activeControl = param;
+                this.dragStart = { y: pos.y, value: this[param] };
+                return true;
+            }
+        }
+        return false;
+    }
+
+    handleDragInteraction(worldPos) {
+        if (!this.activeControl) return;
+
+        const dy = this.dragStart.y - worldPos.y;
+        const sensitivity = 0.02;
+        let newValue = this.dragStart.value + dy * sensitivity;
+        newValue = Math.max(-2, Math.min(2, newValue)); // Clamp between -2 and 2
+
+        if (this.activeControl === 'levelA') {
+            this.levelA = newValue;
+            this.levelAParam.setTargetAtTime(newValue, audioContext.currentTime, 0.01);
+        } else if (this.activeControl === 'levelB') {
+            this.levelB = newValue;
+            this.levelBParam.setTargetAtTime(newValue, audioContext.currentTime, 0.01);
+        }
+    }
+
+    endInteraction() {
+        this.activeControl = null;
     }
 
     getConnectorAt(x, y) {
@@ -163,7 +243,9 @@ export class MathModule {
             type: this.type, 
             x: this.x, 
             y: this.y,
-            operation: this.currentOperationIndex
+            operation: this.currentOperationIndex,
+            levelA: this.levelA,
+            levelB: this.levelB
         }; 
     }
 
@@ -172,5 +254,11 @@ export class MathModule {
         this.x = state.x;
         this.y = state.y;
         this.setOperation(state.operation || 0);
+        this.levelA = state.levelA || 1;
+        this.levelB = state.levelB || 1;
+        if (this.isReady) {
+            this.levelAParam.setValueAtTime(this.levelA, audioContext.currentTime);
+            this.levelBParam.setValueAtTime(this.levelB, audioContext.currentTime);
+        }
     }
 }

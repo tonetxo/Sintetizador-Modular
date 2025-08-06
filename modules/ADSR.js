@@ -1,15 +1,6 @@
 // modules/ADSR.js
 import { audioContext } from './AudioContext.js';
 
-// Estados para el procesador ADSR
-const ADSR_STATE = {
-  IDLE: 0,
-  ATTACK: 1,
-  DECAY: 2,
-  SUSTAIN: 3,
-  RELEASE: 4
-};
-
 export class ADSR {
   constructor(x, y, id = null, initialState = {}) {
     this.id = id || `adsr-${Date.now()}`;

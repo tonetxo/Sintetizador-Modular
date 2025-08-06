@@ -1,7 +1,7 @@
 import { audioContext } from './AudioContext.js';
 
 export class Microphone {
-    constructor(x, y, id = null, initialState = {}) {
+    constructor(x, y, id = null) {
         this.id = id || `microphone-${Date.now()}`;
         this.x = x;
         this.y = y;

@@ -6,7 +6,7 @@ class SampleAndHoldProcessor extends AudioWorkletProcessor {
         this.lastTriggerValue = 0.0;
     }
 
-    process(inputs, outputs, parameters) {
+    process(inputs, outputs) {
         const output = outputs[0];
         if (!output || output.length === 0 || !output[0]) {
             return true;

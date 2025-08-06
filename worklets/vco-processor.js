@@ -84,13 +84,14 @@ class VCOProcessor extends AudioWorkletProcessor {
                     value = 2.0 * this.phase - 1.0;
                     value -= this.poly_blep(this.phase, step);
                     break;
-                case 3: // Triangle
+                case 3: { // Triangle
                     let square = this.phase < finalPW ? 1.0 : -1.0;
                     square += this.poly_blep(this.phase, step);
                     square -= this.poly_blep((this.phase + (1.0 - finalPW)) % 1.0, step);
                     value = step * square + (1 - step) * this.lastOutput;
                     this.lastOutput = value;
                     break;
+                }
             }
 
             outputChannel[i] = value * 0.8 * 0.2;

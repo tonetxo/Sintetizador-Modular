@@ -1,12 +1,12 @@
 class VocoderProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
-        this.port.onmessage = (event) => {
+        this.port.onmessage = () => {
             // Handle messages from the main thread if needed
         };
     }
 
-    process(inputs, outputs, parameters) {
+    process(inputs, outputs) {
         const carrierInput = inputs[0];
         const modulatorInput = inputs[1];
         const output = outputs[0];

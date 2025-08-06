@@ -41,7 +41,7 @@ export class VCO {
         this.setWaveform(this.waveforms[this.currentWaveformIndex]);
     }
 
-    setWaveform(type) {
+    setWaveform() {
         this.activeSource.disconnect(this.output);
         const waveformName = this.waveforms[this.currentWaveformIndex];
 
