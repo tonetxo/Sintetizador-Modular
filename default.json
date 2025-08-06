@@ -1,0 +1,94 @@
+{
+  "modules": [
+    {
+      "id": "keyboard-main",
+      "type": "Keyboard",
+      "x": 419,
+      "y": 666,
+      "isPermanent": true,
+      "portamentoValue": 0.2,
+      "octave": 5
+    },
+    {
+      "id": "output-main",
+      "type": "Output",
+      "x": 1318,
+      "y": 226,
+      "isPermanent": true
+    },
+    {
+      "id": "vco-1754448487773",
+      "type": "VCO",
+      "x": 405,
+      "y": 127,
+      "frequency": 440,
+      "detune": 0,
+      "waveform": "square",
+      "pulseWidth": 0.5
+    },
+    {
+      "id": "vcf-1754448503079",
+      "type": "VCF",
+      "x": 805,
+      "y": 97,
+      "cutoff": 612.9056396484375,
+      "resonance": 0,
+      "filterType": "lowpass",
+      "bypassed": false
+    },
+    {
+      "id": "vca-1754448509261",
+      "type": "VCA",
+      "x": 1113,
+      "y": 187
+    },
+    {
+      "id": "adsr-1754448521157",
+      "type": "ADSR",
+      "x": 731,
+      "y": 475,
+      "attack": 0.25875,
+      "decay": 0.1,
+      "sustain": 0.8,
+      "release": 0.2
+    }
+  ],
+  "connections": [
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "adsr-1754448521157",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "adsr-1754448521157",
+      "fromConnector": "CV",
+      "toId": "vca-1754448509261",
+      "toConnector": "CV 1"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "TENSION",
+      "toId": "vco-1754448487773",
+      "toConnector": "1v/oct"
+    },
+    {
+      "fromId": "vco-1754448487773",
+      "fromConnector": "Out",
+      "toId": "vcf-1754448503079",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "vcf-1754448503079",
+      "fromConnector": "audio",
+      "toId": "vca-1754448509261",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "vca-1754448509261",
+      "fromConnector": "audio",
+      "toId": "output-main",
+      "toConnector": "audio"
+    }
+  ]
+}

@@ -1086,6 +1086,7 @@ async function setup() {
         loadWorklet('ADSR', './worklets/adsr-processor.js'),
         loadWorklet('Sequencer', './worklets/sequencer-processor.js'),
         loadWorklet('VCO', './worklets/vco-processor.js'),
+        loadWorklet('LFO', './worklets/lfo-processor.js'),
         loadWorklet('PWM', './worklets/pwm-processor.js'),
         loadWorklet('Vocoder', './worklets/vocoder-processor.js'),
         loadWorklet('Math', './worklets/math-processor.js'),

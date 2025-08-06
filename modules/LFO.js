@@ -1,20 +1,6 @@
 // modules/LFO.js
 import { audioContext } from './AudioContext.js';
 
-function createNoiseGenerator(audioCtx) {
-    const bufferSize = audioCtx.sampleRate * 2;
-    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-    const output = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-        output[i] = Math.random() * 2 - 1;
-    }
-    const noiseNode = audioCtx.createBufferSource();
-    noiseNode.buffer = buffer;
-    noiseNode.loop = true;
-    noiseNode.start();
-    return noiseNode;
-}
-
 export class LFO {
     constructor(x, y, id = null, initialState = {}) {
         this.id = id || `lfo-${Date.now()}`;
@@ -24,15 +10,32 @@ export class LFO {
         this.height = 260;
         this.type = 'LFO';
 
-        this.initialState = initialState; 
+        this.workletNode = null;
+        this.rateParam = null;
+        this.lfoDepthGain = null;
+        this.inputs = {};
+        this.outputs = {};
+        this.activeControl = null;
+        this.paramHotspots = {};
+        this.waveforms = ['sine', 'square', 'sawtooth', 'triangle', 'noise'];
+        this.currentWaveformIndex = 0;
+        this.isBypassed = false;
+
+        this.initialState = initialState;
         this.readyPromise = this.init();
     }
 
     async init() {
-        this.oscillator = audioContext.createOscillator();
-        this.oscillator.frequency.setValueAtTime(this.initialState.rate !== undefined ? this.initialState.rate : 8, audioContext.currentTime);
-        
-        this.noise = createNoiseGenerator(audioContext);
+        try {
+            this.workletNode = new AudioWorkletNode(audioContext, 'lfo-processor');
+        } catch (e) {
+            console.error(`[LFO-${this.id}] Error al crear el worklet para el LFO:`, e);
+            return; 
+        }
+
+        this.rateParam = this.workletNode.parameters.get('frequency');
+        // Usamos initialState para los valores por defecto, o un valor fijo si no existe
+        this.rateParam.setValueAtTime(this.initialState.rate !== undefined ? this.initialState.rate : 5, audioContext.currentTime);
 
         this.lfoDepthGain = audioContext.createGain();
         this.lfoDepthGain.gain.setValueAtTime(this.initialState.depth !== undefined ? this.initialState.depth : 3, audioContext.currentTime);
@@ -40,12 +43,11 @@ export class LFO {
         this.attackEnvelope = audioContext.createGain();
         this.attackEnvelope.gain.value = 0;
 
-        this.attackTimeConstant = this.initialState.attack !== undefined ? this.initialState.attack : 0.1; 
-        
+        this.attackTimeConstant = this.initialState.attack !== undefined ? this.initialState.attack : 0.1;
+
         try {
             this.gateProcessorNode = new AudioWorkletNode(audioContext, 'gate-processor');
             this.gateProcessorNode.connect(audioContext.destination);
-
             this.gateProcessorNode.port.onmessage = (event) => {
                 const now = audioContext.currentTime;
                 if (event.data === 'gate-on') {
@@ -57,48 +59,43 @@ export class LFO {
                 }
             };
         } catch (e) {
-            console.error('Error al crear el worklet de gate para el LFO:', e);
+            console.error(`[LFO-${this.id}] Error al crear el worklet de gate para el LFO:`, e);
         }
-
+        
         this.outputScaler = audioContext.createGain();
-        this.outputScaler.gain.value = 0.04;
+        this.outputScaler.gain.value = 0.5;
 
         this.isBypassed = this.initialState.isBypassed || false;
         this.bypassNode = audioContext.createGain();
         this.bypassNode.gain.value = this.isBypassed ? 0 : 1;
-
-        // Workaround para mantener el nodo LFO activo y evitar que sea eliminado por el recolector de basura
+        
         const dummyGain = audioContext.createGain();
         dummyGain.gain.value = 0;
         this.bypassNode.connect(dummyGain);
         dummyGain.connect(audioContext.destination);
 
-        this.oscillator.connect(this.lfoDepthGain);
-        this.noise.connect(this.lfoDepthGain);
+        this.workletNode.connect(this.lfoDepthGain);
         this.lfoDepthGain.connect(this.attackEnvelope);
         this.attackEnvelope.connect(this.outputScaler);
         this.outputScaler.connect(this.bypassNode);
         
-        this.oscillator.start();
-        
-        this.activeControl = null;
-        this.paramHotspots = {};
-        this.waveforms = ['sine', 'square', 'sawtooth', 'triangle', 'pulse', 'noise'];
-        this.currentWaveformIndex = 0;
-        this.oscillator.type = 'sine';
+        const wfIndex = this.waveforms.indexOf(this.initialState.waveform || 'sine');
+        this.currentWaveformIndex = (wfIndex !== -1) ? wfIndex : 0;
 
         this.inputs = {
-            'Rate CV': { x: this.width / 2 - 40, y: this.height, type: 'cv', target: this.oscillator.frequency, orientation: 'vertical' },
+            'Rate CV': { x: this.width / 2 - 40, y: this.height, type: 'cv', target: this.rateParam, orientation: 'vertical' },
             'Gate': { x: this.width / 2 + 40, y: this.height, type: 'gate', target: this.gateProcessorNode, orientation: 'vertical' }
         };
         this.outputs = {
             'SALIDA': { x: this.width, y: this.height / 2, type: 'cv', source: this.bypassNode, orientation: 'horizontal' }
         };
-
         
+        this.setWaveform(this.waveforms[this.currentWaveformIndex]);
+        // --- CORRECCIÓN: No llamamos a setState durante la inicialización ---
+        // La inicialización ya usa los valores de `initialState`. `setState` es solo para después.
     }
 
-
+    // ... (la función draw no necesita cambios)
     draw(ctx, isSelected, hoveredConnectorInfo) {
         ctx.save();
         ctx.translate(this.x, this.y);
@@ -114,23 +111,27 @@ export class LFO {
         ctx.textAlign = 'center';
         ctx.fillText('LFO', this.width / 2, 22);
         
-        if (this.isBypassed) {
+        if (!this.workletNode) {
+            ctx.font = 'bold 16px Arial';
+            ctx.fillStyle = 'red';
+            ctx.fillText('ERROR', this.width / 2, this.height / 2);
+        } else if (this.isBypassed) {
             ctx.font = 'bold 16px Arial';
             ctx.fillStyle = '#aaa';
             ctx.fillText('BYPASSED', this.width / 2, this.height / 2);
         } else {
             ctx.font = '10px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText(`Rate: ${this.oscillator.frequency.value.toFixed(2)}Hz`, 10, 40);
+            ctx.fillText(`Rate: ${(this.rateParam?.value ?? 0).toFixed(2)}Hz`, 10, 40);
             ctx.textAlign = 'right';
-            ctx.fillText(`Depth: ${this.lfoDepthGain.gain.value.toFixed(2)}`, this.width - 10, 40);
+            ctx.fillText(`Depth: ${(this.lfoDepthGain?.gain.value ?? 0).toFixed(2)}`, this.width - 10, 40);
 
             const isNoise = this.waveforms[this.currentWaveformIndex] === 'noise';
             ctx.globalAlpha = isNoise ? 0.5 : 1.0;
-            this.drawVerticalSlider(ctx, 'rate', 30, 60, 100, 0.01, 20, this.oscillator.frequency.value, false);
+            this.drawVerticalSlider(ctx, 'rate', 30, 60, 100, 0.01, 20, this.rateParam.value, false);
             ctx.globalAlpha = 1.0;
             
-            this.drawVerticalSlider(ctx, 'depth', this.width - 30, 60, 100, 0.01, 1000, this.lfoDepthGain.gain.value, true);
+            this.drawVerticalSlider(ctx, 'depth', this.width - 30, 60, 100, 0.01, 10, this.lfoDepthGain.gain.value, true);
 
             ctx.beginPath();
             ctx.arc(this.width / 2, 115, 25, 0, Math.PI * 2);
@@ -148,8 +149,53 @@ export class LFO {
         this.drawConnectors(ctx, hoveredConnectorInfo);
     }
     
+    // ...
+    getState() {
+        if (!this.workletNode) return { id: this.id, type: 'LFO', x: this.x, y: this.y, error: true };
+        return {
+            id: this.id,
+            type: 'LFO',
+            x: this.x, y: this.y,
+            rate: this.rateParam.value,
+            depth: this.lfoDepthGain.gain.value,
+            attack: this.attackTimeConstant,
+            waveform: this.waveforms[this.currentWaveformIndex],
+            isBypassed: this.isBypassed
+        };
+    }
+
+    // --- CORRECCIÓN: Hacemos setState más seguro ---
+    setState(state) {
+        if (!this.workletNode || !state) return;
+        this.id = state.id || this.id;
+        this.x = state.x; 
+        this.y = state.y;
+
+        if (this.rateParam && state.rate !== undefined) {
+            this.rateParam.setValueAtTime(state.rate, audioContext.currentTime);
+        }
+        if (this.lfoDepthGain && state.depth !== undefined) {
+            this.lfoDepthGain.gain.setValueAtTime(state.depth, audioContext.currentTime);
+        }
+        if (state.attack !== undefined) {
+            this.attackTimeConstant = state.attack;
+        }
+        if (state.waveform !== undefined) {
+            const wfIndex = this.waveforms.indexOf(state.waveform);
+            if(wfIndex !== -1) {
+                this.currentWaveformIndex = wfIndex;
+                this.setWaveform(this.waveforms[this.currentWaveformIndex]);
+            }
+        }
+        if (state.isBypassed !== undefined) {
+            this.isBypassed = state.isBypassed;
+            this.bypassNode.gain.value = this.isBypassed ? 0 : 1;
+        }
+    }
+    
+    // ... (El resto del archivo LFO.js sin cambios)
     handleDragInteraction(worldPos) {
-        if (!this.activeControl || this.isBypassed) return;
+        if (!this.activeControl || this.isBypassed || !this.workletNode) return;
         const sliderRect = this.paramHotspots[this.activeControl];
         if (this.activeControl === 'rate' || this.activeControl === 'depth') {
             const localY = worldPos.y - this.y;
@@ -157,10 +203,10 @@ export class LFO {
             normalizedValue = Math.max(0, Math.min(1, normalizedValue));
             if (this.activeControl === 'rate') {
                 const newRate = 0.01 + normalizedValue * (20 - 0.01);
-                this.oscillator.frequency.setValueAtTime(newRate, audioContext.currentTime);
+                this.rateParam.setTargetAtTime(newRate, audioContext.currentTime, 0.01);
             } else if (this.activeControl === 'depth') {
-                const newDepth = Math.exp(Math.log(0.01) + normalizedValue * (Math.log(1000) - Math.log(0.01)));
-                this.lfoDepthGain.gain.setValueAtTime(newDepth, audioContext.currentTime);
+                const newDepth = Math.exp(Math.log(0.01) + normalizedValue * (Math.log(10) - Math.log(0.01)));
+                this.lfoDepthGain.gain.setTargetAtTime(newDepth, audioContext.currentTime, 0.01);
             }
         } else if (this.activeControl === 'attack') {
             const localX = worldPos.x - this.x;
@@ -174,53 +220,26 @@ export class LFO {
     }
 
     disconnect() {
-        this.oscillator.disconnect();
-        this.lfoDepthGain.disconnect();
-        this.attackEnvelope.disconnect();
+        if (this.workletNode) this.workletNode.disconnect();
+        if (this.lfoDepthGain) this.lfoDepthGain.disconnect();
+        if (this.attackEnvelope) this.attackEnvelope.disconnect();
         if (this.gateProcessorNode) {
             this.gateProcessorNode.port.close();
             this.gateProcessorNode.disconnect();
         }
-        this.outputScaler.disconnect();
-        this.bypassNode.disconnect();
-        this.noise.disconnect();
+        if (this.outputScaler) this.outputScaler.disconnect();
+        if (this.bypassNode) this.bypassNode.disconnect();
     }
-
-    getState() {
-        return {
-            id: this.id,
-            type: 'LFO',
-            x: this.x, y: this.y,
-            rate: this.oscillator.frequency.value,
-            depth: this.lfoDepthGain.gain.value,
-            attack: this.attackTimeConstant,
-            waveform: this.waveforms[this.currentWaveformIndex],
-            isBypassed: this.isBypassed
-        };
-    }
-
-    setState(state) {
-        this.id = state.id || this.id;
-        this.x = state.x; 
-        this.y = state.y;
-        if (this.oscillator) {
-            this.oscillator.frequency.setValueAtTime(state.rate, audioContext.currentTime);
-            if (state.depth !== undefined) {
-                this.lfoDepthGain.gain.setValueAtTime(state.depth, audioContext.currentTime);
-            }
-            if (state.attack !== undefined) {
-                this.attackTimeConstant = state.attack;
-            }
-            const wfIndex = this.waveforms.indexOf(state.waveform);
-            this.currentWaveformIndex = (wfIndex !== -1) ? wfIndex : 0;
-            this.setWaveform(this.waveforms[this.currentWaveformIndex]);
-            if (state.isBypassed !== undefined) {
-                this.isBypassed = state.isBypassed;
-                this.bypassNode.gain.value = this.isBypassed ? 0 : 1;
-            }
+    
+    setWaveform(waveform) {
+        if (!this.workletNode) return;
+        const wfIndex = this.waveforms.indexOf(waveform);
+        if (wfIndex !== -1) {
+            this.currentWaveformIndex = wfIndex;
+            const workletWfIndex = waveform === 'noise' ? 4 : wfIndex;
+            this.workletNode.port.postMessage({ type: 'waveform', value: workletWfIndex });
         }
     }
-
     drawHorizontalSlider(ctx, paramName, x, y, width, minVal, maxVal, currentValue, isLogarithmic) {
         const knobRadius = 8;
         ctx.strokeStyle = '#555';
@@ -276,10 +295,11 @@ export class LFO {
         ctx.beginPath();
         const type = this.waveforms[this.currentWaveformIndex];
         if (type === 'noise') {
-            ctx.font = 'bold 30px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('*', cx, cy);
+            for (let i = 0; i < 15; i++) {
+                const randX = cx + (Math.random() - 0.5) * radius * 1.5;
+                const randY = cy + (Math.random() - 0.5) * radius * 1.5;
+                ctx.fillRect(randX, randY, 2, 2);
+            }
         } else if (type === 'sawtooth') {
             ctx.moveTo(cx - radius, cy + radius/2);
             ctx.lineTo(cx, cy - radius);
@@ -300,12 +320,6 @@ export class LFO {
             ctx.lineTo(cx - radius/2, cy - radius/2);
             ctx.lineTo(cx + radius/2, cy + radius/2);
             ctx.lineTo(cx + radius, cy - radius/2);
-        } else if (type === 'pulse') {
-            ctx.moveTo(cx - radius, cy + radius / 2);
-            ctx.lineTo(cx - radius, cy - radius / 2);
-            ctx.lineTo(cx + radius / 2, cy - radius / 2);
-            ctx.lineTo(cx + radius / 2, cy + radius / 2);
-            ctx.lineTo(cx + radius, cy + radius / 2);
         }
         ctx.stroke();
         ctx.restore();
@@ -340,28 +354,12 @@ export class LFO {
         });
     }
     toggleBypass() {
+        if (!this.bypassNode) return;
         this.isBypassed = !this.isBypassed;
         const now = audioContext.currentTime;
         const rampTime = 0.02; 
         const newGain = this.isBypassed ? 0 : 1;
         this.bypassNode.gain.linearRampToValueAtTime(newGain, now + rampTime);
-    }
-    setWaveform(waveform) {
-        if (!this.oscillator) return;
-        try { this.oscillator.disconnect(this.lfoDepthGain); } catch (e) { /* Ignorar */ }
-        try { this.noise.disconnect(this.lfoDepthGain); } catch (e) { /* Ignorar */ }
-        
-        if (waveform === 'noise') {
-            this.noise.connect(this.lfoDepthGain);
-        } else {
-            this.oscillator.type = waveform === 'pulse' ? 'square' : waveform;
-            this.oscillator.connect(this.lfoDepthGain);
-        }
-        
-        const wfIndex = this.waveforms.indexOf(waveform);
-        if (wfIndex !== -1) {
-            this.currentWaveformIndex = wfIndex;
-        }
     }
     handleClick(x, y) {
         if (this.isBypassed) return false;

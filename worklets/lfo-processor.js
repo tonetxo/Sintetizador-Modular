@@ -1,9 +1,9 @@
 // worklets/vco-processor.js
-class VCOProcessor extends AudioWorkletProcessor {
+class LFOProcessor extends AudioWorkletProcessor {
     static get parameterDescriptors() {
         // Tus descriptores de parámetros se mantienen, están bien definidos.
         return [
-            { name: 'frequency', defaultValue: 440, minValue: 20, maxValue: 20000 },
+            { name: 'frequency', defaultValue: 5, minValue: 0.01, maxValue: 1000 },
             { name: 'detune', defaultValue: 0, minValue: -100, maxValue: 100 },
             { name: 'pulseWidth', defaultValue: 0.5, minValue: 0.01, maxValue: 0.99 },
             { name: 'vOct', defaultValue: 0, automationRate: 'a-rate' },
@@ -109,4 +109,4 @@ class VCOProcessor extends AudioWorkletProcessor {
     }
 }
 
-registerProcessor('vco-processor', VCOProcessor);
+registerProcessor('lfo-processor', LFOProcessor);
