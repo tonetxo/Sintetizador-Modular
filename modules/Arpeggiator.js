@@ -129,7 +129,8 @@ export class Arpeggiator {
 
     updateWorkletState() {
         if (!this.workletNode) return;
-        this.workletNode.port.postMessage({ type: 'config', params: this.params });
+        const clockInConnected = this.inputs['CLOCK_IN'].connected;
+        this.workletNode.port.postMessage({ type: 'config', params: this.params, clockInConnected });
         this.sendNotesToWorklet();
     }
 

@@ -51,7 +51,7 @@ class ClockProcessor extends AudioWorkletProcessor {
             return true;
         }
 
-        const tickInterval = 60 / this._params.tempo; // Intervalo en segundos para un pulso por negra
+        const tickInterval = 60 / (this._params.tempo * 4); // 4 pulsos por negra (PPQN = 4)
 
         for (let i = 0; i < outputChannel.length; i++) {
             const currentFrameTime = currentTime + i / sampleRate;
