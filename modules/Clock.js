@@ -7,15 +7,18 @@ export class Clock {
         this.x = x;
         this.y = y;
         this.width = 150;
-        this.height = 100;
+        this.height = 120; // Aumentar altura para el campo de texto
 
         this.params = {
             tempo: initialState.tempo || 120,
             running: initialState.running !== undefined ? initialState.running : false,
         };
 
+        this.isEditingTempo = false;
+        this.tempoInputString = String(this.params.tempo);
+
         this.outputs = {
-            'CLOCK_OUT': { x: this.width, y: this.height / 2, type: 'gate', source: null, orientation: 'horizontal' }, // Source will be workletNode
+            'CLOCK_OUT': { x: this.width, y: this.height / 2, type: 'gate', source: null, orientation: 'horizontal' },
         };
         this.inputs = {};
 
@@ -29,11 +32,10 @@ export class Clock {
     async initWorklet() {
         try {
             this.workletNode = new AudioWorkletNode(audioContext, 'clock-processor', {
-                outputChannelCount: [1] // Un canal de salida
+                outputChannelCount: [1]
             });
-            this.outputs['CLOCK_OUT'].source = this.workletNode; // Asignar el workletNode como fuente
+            this.outputs['CLOCK_OUT'].source = this.workletNode;
 
-            // Workaround para mantener el workletNode activo en el grafo de audio
             const dummyGain = audioContext.createGain();
             dummyGain.gain.value = 0;
             this.workletNode.connect(dummyGain);
@@ -52,6 +54,17 @@ export class Clock {
 
     handleClick(x, y) {
         const localPos = { x: x - this.x, y: y - this.y };
+
+        // Comprobar clic en el campo de texto del tempo
+        const tempoDisplayRect = { x: this.width / 2 - 30, y: 75, width: 60, height: 20 };
+        if (this.isInside(localPos, tempoDisplayRect)) {
+            this.isEditingTempo = true;
+            this.tempoInputString = String(this.params.tempo);
+            // Informar a renderer.js que este módulo está capturando texto
+            window.setActiveTextInputModule(this);
+            return true;
+        }
+
         for (const [name, spot] of Object.entries(this.hotspots)) {
             if (this.isInside(localPos, spot)) {
                 if (spot.type === 'button' && name === 'run/stop') {
@@ -64,6 +77,28 @@ export class Clock {
         }
         return false;
     }
+    
+    handleKey(key) {
+        if (!this.isEditingTempo) return;
+
+        if (key === 'Enter') {
+            const newTempo = parseInt(this.tempoInputString, 10);
+            if (!isNaN(newTempo) && newTempo >= 20 && newTempo <= 999) {
+                this.params.tempo = newTempo;
+                this.updateWorkletState();
+            }
+            this.isEditingTempo = false;
+            window.setActiveTextInputModule(null);
+        } else if (key === 'Backspace') {
+            this.tempoInputString = this.tempoInputString.slice(0, -1);
+        } else if (!isNaN(parseInt(key, 10)) && this.tempoInputString.length < 3) {
+            this.tempoInputString += key;
+        } else if (key === 'Escape') {
+            this.isEditingTempo = false;
+            window.setActiveTextInputModule(null);
+        }
+    }
+
 
     checkInteraction(pos) {
         const localPos = { x: pos.x - this.x, y: pos.y - this.y };
@@ -92,7 +127,8 @@ export class Clock {
             const range = hotspot.max - hotspot.min;
             let newValue = this.dragStart.value + dy * (range / 128);
             newValue = Math.max(hotspot.min, Math.min(hotspot.max, newValue));
-            this.params[this.activeControl] = newValue;
+            this.params[this.activeControl] = Math.round(newValue); // Redondear para tempo
+            this.tempoInputString = String(this.params.tempo);
         }
     }
 
@@ -110,10 +146,32 @@ export class Clock {
         ctx.fillText('CLOCK', this.width / 2, 22);
 
         this.drawKnob(ctx, 'tempo', 'BPM', this.width / 2, 55, 30, 300, this.params.tempo);
-        this.drawButton(ctx, 'run/stop', this.params.running ? 'STOP' : 'START', this.width / 2 - 30, 80, 60, 20);
+        this.drawTempoDisplay(ctx);
+        this.drawButton(ctx, 'run/stop', this.params.running ? 'STOP' : 'START', this.width / 2 - 30, 100, 60, 20);
 
         this.drawConnectors(ctx, hoveredConnectorInfo);
         ctx.restore();
+    }
+
+    drawTempoDisplay(ctx) {
+        const rect = { x: this.width / 2 - 30, y: 75, width: 60, height: 20 };
+        ctx.fillStyle = this.isEditingTempo ? '#555' : '#333';
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 1;
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+        ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+
+        ctx.fillStyle = '#E0E0E0';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        let displayText = this.isEditingTempo ? this.tempoInputString : String(this.params.tempo);
+        // Añadir un cursor parpadeante si se está editando
+        if (this.isEditingTempo && Math.floor(Date.now() / 500) % 2 === 0) {
+            displayText += '_';
+        }
+        ctx.fillText(displayText, rect.x + rect.width / 2, rect.y + rect.height / 2);
     }
 
     drawKnob(ctx, paramName, label, x, y, min, max, value) {
@@ -127,8 +185,8 @@ export class Clock {
         ctx.fillStyle = '#E0E0E0';
         ctx.textAlign = 'center';
         ctx.fillText(label, x, y - knobRadius - 5);
-        ctx.fillText(value.toFixed(0), x, y + knobRadius + 12);
-
+        // No dibujamos el valor numérico aquí, se hará en el display
+        
         ctx.strokeStyle = '#555';
         ctx.lineWidth = 3;
         ctx.beginPath();

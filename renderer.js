@@ -44,6 +44,11 @@ const MODULE_CLASSES = {
   Arpeggiator, Clock
 };
 
+// Exponer función para que los módulos puedan registrarse para entrada de texto
+window.setActiveTextInputModule = (module) => {
+  activeTextInputModule = module;
+};
+
 let modules = [];
 let connections = [];
 let selectedModules = [];
@@ -56,6 +61,7 @@ let patchStart = null;
 let isPanning = false;
 let mousePos = { x: 0, y: 0 };
 let hoveredConnectorInfo = null;
+let activeTextInputModule = null; // <--- AÑADIDO: Módulo que recibe texto
 let analyser = null;
 let dataArray = null;
 let isDraggingVisualizer = false;
@@ -511,6 +517,12 @@ function createAudioPlayerUI(module) {
 
 function onMouseDown(e) {
   e.preventDefault();
+
+  // Si se está editando texto y se hace clic fuera, se finaliza la edición.
+  if (activeTextInputModule && !getModuleAt(screenToWorld(e.clientX, e.clientY).x, screenToWorld(e.clientX, e.clientY).y) === activeTextInputModule) {
+    activeTextInputModule.handleKey('Enter'); // Simula 'Enter' para confirmar
+  }
+
   if (interactingModule) return;
   mousePos = { x: e.clientX, y: e.clientY };
   const worldPos = screenToWorld(mousePos.x, mousePos.y);
@@ -654,6 +666,13 @@ function showModuleContextMenu(module, x, y) {
 }
 
 function onKeyDown(e) {
+  // Si un módulo está capturando texto, se lo enviamos y detenemos.
+  if (activeTextInputModule) {
+    activeTextInputModule.handleKey(e.key);
+    e.preventDefault();
+    return;
+  }
+
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
@@ -664,6 +683,10 @@ function onKeyDown(e) {
 }
 
 function onKeyUp(e) {
+  if (activeTextInputModule) {
+    e.preventDefault();
+    return;
+  }
   if (e.target.tagName === 'INPUT') return;
   const keyboardModule = modules.find(m => m instanceof Keyboard);
   if (keyboardModule) keyboardModule.handleKeyUp(e.key.toLowerCase());

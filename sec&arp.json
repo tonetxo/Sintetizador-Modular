@@ -1,0 +1,288 @@
+{
+  "modules": [
+    {
+      "id": "keyboard-main",
+      "type": "Keyboard",
+      "x": 63,
+      "y": 410,
+      "isPermanent": true,
+      "portamentoValue": 0.12307692307692308,
+      "octave": 2
+    },
+    {
+      "id": "output-main",
+      "type": "Output",
+      "x": 1735,
+      "y": 280,
+      "isPermanent": true
+    },
+    {
+      "id": "vco-1754419725142",
+      "type": "VCO",
+      "x": 716,
+      "y": 219,
+      "frequency": 440,
+      "detune": 0,
+      "waveform": "sawtooth",
+      "pulseWidth": 0.5
+    },
+    {
+      "id": "vca-1754419728310",
+      "type": "VCA",
+      "x": 1567,
+      "y": 235
+    },
+    {
+      "id": "adsr-1754419738278",
+      "type": "ADSR",
+      "x": 1052,
+      "y": 438,
+      "attack": 0.5157916666666666,
+      "decay": 0.1,
+      "sustain": 0.8,
+      "release": 0.2
+    },
+    {
+      "id": "arpeggiator-1754419746358",
+      "type": "Arpeggiator",
+      "x": 404,
+      "y": 296,
+      "portamentoValue": 0.19000000000000003,
+      "tempo": 179.6875,
+      "mode": 3,
+      "octaveRange": 0,
+      "gateLength": 0.529296875,
+      "hold": true,
+      "running": true
+    },
+    {
+      "id": "adsr-1754519039157",
+      "type": "ADSR",
+      "x": 1055,
+      "y": 45,
+      "attack": 0.4747064583333344,
+      "decay": 0.1,
+      "sustain": 0.8,
+      "release": 0.2
+    },
+    {
+      "id": "sequencer-1754519055171",
+      "type": "Sequencer",
+      "x": -160,
+      "y": -29,
+      "tempo": 120,
+      "direction": 3,
+      "numberOfSteps": 16,
+      "running": true,
+      "sequence": [
+        0.20420000000000088,
+        0.15420000000000086,
+        0.08545000000000087,
+        0.24170000000000086,
+        0.24795000000000086,
+        0.31875,
+        0.05420000000000087,
+        0,
+        0.27295000000000086,
+        0.12295000000000086,
+        0.1875,
+        0.25420000000000087,
+        0.22295000000000087,
+        0.0875,
+        0.23545000000000088,
+        0.21045000000000086
+      ],
+      "gateLengths": [
+        0.8,
+        0.8,
+        0.8,
+        0.8,
+        0.8,
+        0.2905,
+        0.8,
+        0.8,
+        0.8,
+        0.538,
+        0.8,
+        0.8,
+        0.8,
+        0.8,
+        0.8,
+        0.8
+      ],
+      "stepStates": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "id": "vco-1754519075226",
+      "type": "VCO",
+      "x": 458,
+      "y": -197,
+      "frequency": 440,
+      "detune": 0,
+      "waveform": "square",
+      "pulseWidth": 0.5
+    },
+    {
+      "id": "vcf-1754519082468",
+      "type": "VCF",
+      "x": 775.676,
+      "y": -132.683,
+      "cutoff": 344.71990966796875,
+      "resonance": 4.8252272605896,
+      "filterType": "notch",
+      "bypassed": false
+    },
+    {
+      "id": "mixer-1754519091595",
+      "type": "Mixer",
+      "x": 1215,
+      "y": -136,
+      "levels": [
+        1,
+        0.4099999964237213,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "clock-1754519133576",
+      "type": "Clock",
+      "x": -198,
+      "y": 501,
+      "tempo": 120,
+      "running": true
+    },
+    {
+      "id": "lfo-1754519360821",
+      "type": "LFO",
+      "x": 11.234000000000037,
+      "y": 568.3279999999999,
+      "rate": 2.6087000370025635,
+      "depth": 1.5488165616989136,
+      "attack": 0.1,
+      "waveform": "sine",
+      "isBypassed": false
+    }
+  ],
+  "connections": [
+    {
+      "fromId": "vca-1754419728310",
+      "fromConnector": "audio",
+      "toId": "output-main",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "arpeggiator-1754419746358",
+      "toConnector": "GATE_IN"
+    },
+    {
+      "fromId": "arpeggiator-1754419746358",
+      "fromConnector": "TENSION",
+      "toId": "vco-1754419725142",
+      "toConnector": "1v/oct"
+    },
+    {
+      "fromId": "arpeggiator-1754419746358",
+      "fromConnector": "DISPARO",
+      "toId": "adsr-1754419738278",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "adsr-1754419738278",
+      "fromConnector": "CV",
+      "toId": "vca-1754419728310",
+      "toConnector": "CV 1"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "TENSION",
+      "toId": "arpeggiator-1754419746358",
+      "toConnector": "CV_IN"
+    },
+    {
+      "fromId": "adsr-1754519039157",
+      "fromConnector": "CV",
+      "toId": "vca-1754419728310",
+      "toConnector": "CV 2"
+    },
+    {
+      "fromId": "sequencer-1754519055171",
+      "fromConnector": "TENSION",
+      "toId": "vco-1754519075226",
+      "toConnector": "1v/oct"
+    },
+    {
+      "fromId": "vco-1754519075226",
+      "fromConnector": "Out",
+      "toId": "vcf-1754519082468",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "vcf-1754519082468",
+      "fromConnector": "audio",
+      "toId": "mixer-1754519091595",
+      "toConnector": "In 1"
+    },
+    {
+      "fromId": "vco-1754419725142",
+      "fromConnector": "Out",
+      "toId": "mixer-1754519091595",
+      "toConnector": "In 2"
+    },
+    {
+      "fromId": "clock-1754519133576",
+      "fromConnector": "CLOCK_OUT",
+      "toId": "sequencer-1754519055171",
+      "toConnector": "CLOCK_IN"
+    },
+    {
+      "fromId": "clock-1754519133576",
+      "fromConnector": "CLOCK_OUT",
+      "toId": "arpeggiator-1754419746358",
+      "toConnector": "CLOCK_IN"
+    },
+    {
+      "fromId": "mixer-1754519091595",
+      "fromConnector": "Out",
+      "toId": "vca-1754419728310",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "sequencer-1754519055171",
+      "fromConnector": "DISPARO",
+      "toId": "lfo-1754519360821",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "lfo-1754519360821",
+      "fromConnector": "SALIDA",
+      "toId": "vcf-1754519082468",
+      "toConnector": "CV 1"
+    },
+    {
+      "fromId": "arpeggiator-1754419746358",
+      "fromConnector": "TENSION",
+      "toId": "vcf-1754519082468",
+      "toConnector": "CV 2"
+    }
+  ]
+}
