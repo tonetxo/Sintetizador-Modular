@@ -128,7 +128,8 @@ export class LFO {
 
             const isNoise = this.waveforms[this.currentWaveformIndex] === 'noise';
             ctx.globalAlpha = isNoise ? 0.5 : 1.0;
-            this.drawVerticalSlider(ctx, 'rate', 30, 60, 100, 0.01, 20, this.rateParam.value, false);
+            // APLICAR ESCALA LOGARÍTMICA AL SLIDER DE RATE
+            this.drawVerticalSlider(ctx, 'rate', 30, 60, 100, 0.01, 50, this.rateParam.value, true);
             ctx.globalAlpha = 1.0;
             
             this.drawVerticalSlider(ctx, 'depth', this.width - 30, 60, 100, 0.01, 10, this.lfoDepthGain.gain.value, true);
@@ -202,7 +203,10 @@ export class LFO {
             let normalizedValue = (sliderRect.y + sliderRect.height - localY) / sliderRect.height;
             normalizedValue = Math.max(0, Math.min(1, normalizedValue));
             if (this.activeControl === 'rate') {
-                const newRate = 0.01 + normalizedValue * (20 - 0.01);
+                // APLICAR ESCALA LOGARÍTMICA AL RATE
+                const minRate = 0.01;
+                const maxRate = 50;
+                const newRate = Math.exp(Math.log(minRate) + normalizedValue * (Math.log(maxRate) - Math.log(minRate)));
                 this.rateParam.setTargetAtTime(newRate, audioContext.currentTime, 0.01);
             } else if (this.activeControl === 'depth') {
                 const newDepth = Math.exp(Math.log(0.01) + normalizedValue * (Math.log(10) - Math.log(0.01)));
