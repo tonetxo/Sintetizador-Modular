@@ -1,0 +1,15 @@
+fix: Arpeggiator knob interaction and portamento functionality
+
+This commit addresses issues with the Arpeggiator module and confirms portamento functionality:
+
+- **Arpeggiator Knob Interaction Fix:**
+  - Corrected the `checkInteraction` and `handleDragInteraction` logic in `modules/Arpeggiator.js` to ensure proper handling of knob and slider values during interaction. This resolves the issue where knob markers disappeared and values were not updated when dragged.
+
+- **Arpeggiator Portamento Implementation:**
+  - Implemented a dedicated portamento control within the `Arpeggiator` module.
+  - Added `portamentoValue` and `portamentoTime` properties to `Arpeggiator.js`.
+  - Modified `triggerStep` to apply `linearRampToValueAtTime` using the configured `portamentoTime`, allowing smooth pitch transitions between arpeggiated notes.
+  - Integrated a portamento slider into the Arpeggiator's UI for user control.
+  - Ensured `portamentoValue` is correctly saved and loaded with module state.
+
+This completes the requested portamento feature for the Arpeggiator, making it independent of the Keyboard's portamento and fully controllable within its own module.

@@ -8,7 +8,7 @@ export class Arpeggiator {
         this.x = x;
         this.y = y;
         this.width = 250;
-        this.height = 280;
+        this.height = 320; // Aumentar altura para el slider de portamento
 
         this.params = {
             tempo: initialState.tempo || 120,
@@ -51,6 +51,11 @@ export class Arpeggiator {
 
         this.activeMidiNotes = new Set();
         this.latchedMidiNotes = new Set();
+
+        // --- Portamento ---
+        this.portamentoValue = initialState.portamentoValue !== undefined ? initialState.portamentoValue : 0.0; // 0.0 = no portamento
+        this.portamentoTime = 0; // Calculated from portamentoValue
+        this.recalculatePortamentoTime();
         
         // Inicialización asíncrona que define las entradas
         this.readyPromise = this.initWorklets();
@@ -119,13 +124,20 @@ export class Arpeggiator {
         this.workletNode.port.postMessage({ type: 'notes', notes: notesToSend });
     }
 
+    recalculatePortamentoTime() {
+        // Map portamentoValue (0-1) to a time range (e.g., 0 to 1 second)
+        // Using a power curve for more sensitive control at lower values
+        this.portamentoTime = Math.pow(this.portamentoValue, 2) * 1.0; // Max 1 second
+    }
+
     triggerStep(midiNote, gateState) {
         const now = audioContext.currentTime;
         const voltage = (midiNote - 60) / 12; // C4 (MIDI 60) = 0V
 
         if (gateState === 'on') {
             this.cvNode.offset.cancelScheduledValues(now);
-            this.cvNode.offset.setTargetAtTime(voltage, now, 0.005);
+            // Apply portamento here
+            this.cvNode.offset.linearRampToValueAtTime(voltage, now + this.portamentoTime);
             this.gateNode.offset.cancelScheduledValues(now);
             this.gateNode.offset.setTargetAtTime(1.0, now, 0.002);
         } else {
@@ -180,9 +192,15 @@ export class Arpeggiator {
     checkInteraction(pos) {
         const localPos = { x: pos.x - this.x, y: pos.y - this.y };
         for (const [name, spot] of Object.entries(this.hotspots)) {
-            if (this.isInside(localPos, spot) && spot.type === 'knob') {
+            if (this.isInside(localPos, spot) && (spot.type === 'knob' || spot.type === 'slider')) {
                 this.activeControl = name;
-                this.dragStart = { y: localPos.y, value: this.params[name] };
+                let initialValue;
+                if (spot.type === 'knob') {
+                    initialValue = this.params[name];
+                } else if (spot.type === 'slider') {
+                    initialValue = this[name];
+                }
+                this.dragStart = { y: localPos.y, x: localPos.x, value: initialValue };
                 return true;
             }
         }
@@ -191,6 +209,9 @@ export class Arpeggiator {
     
     endInteraction() {
         if (this.activeControl) {
+            if (this.activeControl === 'portamentoValue') {
+                this.recalculatePortamentoTime();
+            }
             this.updateWorkletState();
             this.activeControl = null;
             this.dragStart = {};
@@ -200,6 +221,7 @@ export class Arpeggiator {
     handleDragInteraction(worldPos) {
         if (!this.activeControl) return;
         const hotspot = this.hotspots[this.activeControl];
+        
         if (hotspot?.type === 'knob') {
             const localY = worldPos.y - this.y;
             const dy = this.dragStart.y - localY;
@@ -207,8 +229,13 @@ export class Arpeggiator {
             let newValue = this.dragStart.value + dy * (range / 128); // Sensitivity
             newValue = Math.max(hotspot.min, Math.min(hotspot.max, newValue));
             this.params[this.activeControl] = newValue;
-            // No es necesario llamar a updateWorkletState() en cada frame de arrastre
-            // Se llamará en endInteraction()
+        } else if (hotspot?.type === 'slider') {
+            const localX = worldPos.x - this.x;
+            const dx = localX - this.dragStart.x;
+            const range = hotspot.max - hotspot.min;
+            let newValue = this.dragStart.value + dx * (range / hotspot.width); // Sensitivity based on slider width
+            newValue = Math.max(hotspot.min, Math.min(hotspot.max, newValue));
+            this[this.activeControl] = newValue;
         }
     }
 
@@ -243,6 +270,10 @@ export class Arpeggiator {
         this.drawSelector(ctx, 'mode', 'MODE', col1X - 30, selectorY, 60, 30, this.modeNames[this.params.mode]);
         this.drawSelector(ctx, 'octaveRange', 'OCT RANGE', col2X - 30, selectorY, 60, 30, this.octaveRangeNames[this.params.octaveRange]);
 
+        // Portamento Slider
+        const portamentoY = selectorY + 50;
+        this.drawHorizontalSlider(ctx, 'portamentoValue', this.width / 2 - 80, portamentoY, 160, 0, 1, this.portamentoValue, 'PORTAMENTO');
+
         this.drawConnectors(ctx, hoveredConnectorInfo);
         ctx.restore();
     }
@@ -266,7 +297,7 @@ export class Arpeggiator {
         ctx.arc(x, y, knobRadius, startAngle, startAngle + angleRange);
         ctx.stroke();
 
-        ctx.strokeStyle = '#4a90e2';
+        ctx.strokeStyle = this.activeControl === paramName ? '#aaffff' : '#4a90e2'; // Color activo
         ctx.beginPath();
         ctx.moveTo(x, y);
         ctx.lineTo(x + Math.cos(angle) * knobRadius, y + Math.sin(angle) * knobRadius);
@@ -303,6 +334,36 @@ export class Arpeggiator {
         ctx.textBaseline = 'middle';
         ctx.fillText(value, x + w / 2, y + h / 2);
         this.hotspots[paramName] = { x, y, width: w, height: h, type: 'selector' };
+    }
+
+    drawHorizontalSlider(ctx, paramName, x, y, width, minVal, maxVal, currentValue, label) {
+        const knobRadius = 8;
+        ctx.fillStyle = '#E0E0E0';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, x + width / 2, y - 5);
+
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + width, y);
+        ctx.stroke();
+
+        const normalizedValue = (currentValue - minVal) / (maxVal - minVal);
+        const knobX = x + normalizedValue * width;
+
+        ctx.beginPath();
+        ctx.arc(knobX, y, knobRadius, 0, Math.PI * 2);
+        ctx.fillStyle = this.activeControl === paramName ? '#aaffff' : '#4a90e2';
+        ctx.fill();
+        ctx.strokeStyle = '#E0E0E0';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillText(currentValue.toFixed(2), x + width / 2, y + knobRadius + 12);
+
+        this.hotspots[paramName] = { x: x, y: y - knobRadius, width: width, height: knobRadius * 2, min: minVal, max: maxVal, type: 'slider' };
     }
 
     drawConnectors(ctx, hovered) {
@@ -363,6 +424,7 @@ export class Arpeggiator {
             type: this.type,
             x: this.x,
             y: this.y,
+            portamentoValue: this.portamentoValue,
             ...this.params,
         };
     }
@@ -372,6 +434,8 @@ export class Arpeggiator {
         this.x = state.x;
         this.y = state.y;
         Object.assign(this.params, state);
+        this.portamentoValue = state.portamentoValue !== undefined ? state.portamentoValue : 0.0;
+        this.recalculatePortamentoTime();
         if (this.readyPromise) {
             this.readyPromise.then(() => this.updateWorkletState());
         }
