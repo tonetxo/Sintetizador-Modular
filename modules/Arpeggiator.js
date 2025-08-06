@@ -7,8 +7,8 @@ export class Arpeggiator {
         this.type = 'Arpeggiator';
         this.x = x;
         this.y = y;
-        this.width = 250;
-        this.height = 320; // Aumentar altura para el slider de portamento
+        this.width = 300; // Aumentar ancho
+        this.height = 380; // Aumentar altura
 
         this.params = {
             tempo: initialState.tempo || 120,
@@ -41,8 +41,19 @@ export class Arpeggiator {
         dummyGainGate.connect(audioContext.destination);
         
         this.outputs = {
-            'TENSION': { x: this.width, y: this.height - 80, type: 'cv', source: this.cvNode, orientation: 'horizontal' },
-            'DISPARO': { x: this.width, y: this.height - 40, type: 'gate', source: this.gateNode, orientation: 'horizontal' },
+            'TENSION': { x: this.width, y: this.height / 2 - 20, type: 'cv', source: this.cvNode, orientation: 'horizontal' },
+            'DISPARO': { x: this.width, y: this.height / 2 + 20, type: 'gate', source: this.gateNode, orientation: 'horizontal' },
+        };
+        
+        this.inputs = {
+            'GATE_IN': { x: 0, y: 40, type: 'gate', target: null, orientation: 'horizontal' },
+            'CV_IN': { x: 0, y: 80, type: 'cv', target: null, orientation: 'horizontal' },
+            'CLOCK_IN': { 
+                x: 0, y: 120, type: 'gate', target: null, orientation: 'horizontal',
+                connected: false, // Inicializar como no conectado
+                onConnect: () => { this.inputs['CLOCK_IN'].connected = true; this.updateWorkletState(); },
+                onDisconnect: () => { this.inputs['CLOCK_IN'].connected = false; this.updateWorkletState(); }
+            },
         };
         
         this.hotspots = {};
@@ -71,11 +82,11 @@ export class Arpeggiator {
                     this.triggerStep(e.data.midiNote, e.data.gate);
                 }
             };
-            
+
             // Inicializar el worklet de CV a MIDI
             await audioContext.audioWorklet.addModule('./worklets/cv-to-midi-processor.js');
             this.cvToMidiWorkletNode = new AudioWorkletNode(audioContext, 'cv-to-midi-processor');
-            
+
             // Workaround para mantenerlo activo
             const dummyGainCvMidi = audioContext.createGain();
             dummyGainCvMidi.gain.value = 0;
@@ -98,13 +109,17 @@ export class Arpeggiator {
                 }
             };
 
-            // **Definir las entradas aquí, después de que los worklets estén listos**
-            this.inputs = {
-                'GATE_IN': { x: 0, y: 40, type: 'gate', target: this.cvToMidiWorkletNode.parameters.get('gateIn'), orientation: 'horizontal' },
-                'CV_IN': { x: 0, y: 80, type: 'cv', target: this.cvToMidiWorkletNode.parameters.get('cvIn'), orientation: 'horizontal' },
-                'CLOCK_IN': { x: 0, y: 120, type: 'gate', target: null, orientation: 'horizontal' }, // Lógica de clock pendiente
-            };
-            
+            // Asignar targets después de que los worklets estén listos
+            if (this.inputs && this.inputs['GATE_IN']) {
+                this.inputs['GATE_IN'].target = this.cvToMidiWorkletNode.parameters.get('gateIn');
+            }
+            if (this.inputs && this.inputs['CV_IN']) {
+                this.inputs['CV_IN'].target = this.cvToMidiWorkletNode.parameters.get('cvIn');
+            }
+            if (this.inputs && this.inputs['CLOCK_IN']) {
+                this.inputs['CLOCK_IN'].target = this.workletNode.parameters.get('clock_in');
+            }
+
             this.updateWorkletState();
 
         } catch (error) {
@@ -252,34 +267,36 @@ export class Arpeggiator {
         ctx.fillStyle = '#E0E0E0';
         ctx.font = '14px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('ARPEGGIATOR', this.width / 2, 22);
+                ctx.fillText('ARPEGGIATOR', this.width / 2, 22);
 
         // Controls
-        const controlsY = 50;
-        const col1X = 60;
-        const col2X = this.width - 60;
+        const controlsY = 60;
+        const col1X = this.width / 4;
+        const col2X = this.width * 3 / 4;
 
         this.drawKnob(ctx, 'tempo', 'TEMPO', col1X, controlsY, 20, 300, this.params.tempo);
         this.drawKnob(ctx, 'gateLength', 'GATE', col2X, controlsY, 0.01, 1, this.params.gateLength);
 
-        const buttonY = controlsY + 70;
+        const buttonY = controlsY + 90;
         this.drawButton(ctx, 'run/stop', this.params.running ? 'STOP' : 'START', col1X - 30, buttonY, 60, 30);
         this.drawButton(ctx, 'hold', this.params.hold ? 'HOLD ON' : 'HOLD OFF', col2X - 30, buttonY, 60, 30);
 
-        const selectorY = buttonY + 50;
+        const selectorY = buttonY + 60;
         this.drawSelector(ctx, 'mode', 'MODE', col1X - 30, selectorY, 60, 30, this.modeNames[this.params.mode]);
         this.drawSelector(ctx, 'octaveRange', 'OCT RANGE', col2X - 30, selectorY, 60, 30, this.octaveRangeNames[this.params.octaveRange]);
 
         // Portamento Slider
-        const portamentoY = selectorY + 50;
-        this.drawHorizontalSlider(ctx, 'portamentoValue', this.width / 2 - 80, portamentoY, 160, 0, 1, this.portamentoValue, 'PORTAMENTO');
+        const portamentoY = selectorY + 70;
+        this.drawHorizontalSlider(ctx, 'portamentoValue', this.width / 2 - 100, portamentoY, 200, 0, 1, this.portamentoValue, 'PORTAMENTO');
 
         this.drawConnectors(ctx, hoveredConnectorInfo);
         ctx.restore();
     }
 
+    
+
     drawKnob(ctx, paramName, label, x, y, min, max, value) {
-        const knobRadius = 18;
+        const knobRadius = 20; // Aumentar radio del knob
         const angleRange = Math.PI * 1.5;
         const startAngle = Math.PI * 0.75;
         const normalizedValue = (value - min) / (max - min);

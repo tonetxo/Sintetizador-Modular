@@ -2,6 +2,17 @@
 // worklets/arpeggiator-processor.js
 
 class ArpeggiatorProcessor extends AudioWorkletProcessor {
+    static get parameterDescriptors() {
+        return [
+            {
+                name: 'clock_in',
+                defaultValue: 0,
+                minValue: 0,
+                maxValue: 1,
+                automationRate: 'a-rate'
+            }
+        ];
+    }
     constructor() {
         super();
         this._params = {
@@ -19,12 +30,15 @@ class ArpeggiatorProcessor extends AudioWorkletProcessor {
         this._isRunning = false;
         this._justStarted = false;
         this._pingPongDirection = 1; // For Up-Down mode
+        this._clockInConnected = false; // Nuevo estado para la conexión del clock_in
+        this._lastClockInValue = 0; // Para detectar flancos ascendentes
 
         this.port.onmessage = (e) => {
             if (e.data.type === 'config') {
                 const wasRunning = this._isRunning;
                 Object.assign(this._params, e.data.params);
                 this._isRunning = this._params.running;
+                this._clockInConnected = e.data.clockInConnected; // Actualizar estado de conexión
 
                 if (this._isRunning && !wasRunning) {
                     this._justStarted = true;
@@ -41,7 +55,7 @@ class ArpeggiatorProcessor extends AudioWorkletProcessor {
         };
     }
 
-    process() {
+    process(inputs, outputs, parameters) {
         if (this._justStarted) {
             this._currentStep = 0;
             this._nextStepTime = currentTime;
@@ -61,28 +75,46 @@ class ArpeggiatorProcessor extends AudioWorkletProcessor {
             return true;
         });
 
-        const stepDuration = (60 / this._params.tempo) / 4; // Assuming 16th notes for now
+        const clockIn = parameters.clock_in;
 
-        if (currentTime >= this._nextStepTime) {
-            const midiNote = this._getArpeggiatedNote();
-            if (midiNote !== null) {
-                this.port.postMessage({ type: 'step', midiNote: midiNote, gate: 'on' });
-
-                const gateDuration = stepDuration * this._params.gateLength;
-                this._gateOffEvents.push({
-                    time: this._nextStepTime + gateDuration,
-                    midiNote: midiNote
-                });
-            } else {
-                // If no note is generated (e.g., no notes held and not in hold mode), send gate off
-                this.port.postMessage({ type: 'step', midiNote: 0, gate: 'off' });
+        if (this._clockInConnected) {
+            // Si clock_in está conectado, esperamos un flanco ascendente
+            for (let i = 0; i < clockIn.length; i++) {
+                const currentClockInValue = clockIn[i];
+                if (currentClockInValue > 0.5 && this._lastClockInValue <= 0.5) { // Detectar flanco ascendente
+                    this.triggerStepAndAdvance();
+                }
+                this._lastClockInValue = currentClockInValue;
             }
-
-            this._advanceStep();
-            this._nextStepTime += stepDuration;
+        } else {
+            // Si no hay clock_in, usamos el tempo interno
+            const stepDuration = (60 / this._params.tempo) / 4; // Assuming 16th notes for now
+            if (currentTime >= this._nextStepTime) {
+                this.triggerStepAndAdvance();
+                this._nextStepTime += stepDuration;
+            }
         }
 
         return true;
+    }
+
+    triggerStepAndAdvance() {
+        const midiNote = this._getArpeggiatedNote();
+        if (midiNote !== null) {
+            this.port.postMessage({ type: 'step', midiNote: midiNote, gate: 'on' });
+
+            const stepDuration = (60 / this._params.tempo) / 4; // Necesario para gateDuration
+            const gateDuration = stepDuration * this._params.gateLength;
+            this._gateOffEvents.push({
+                time: currentTime + gateDuration,
+                midiNote: midiNote
+            });
+        } else {
+            // If no note is generated (e.g., no notes held and not in hold mode), send gate off
+            this.port.postMessage({ type: 'step', midiNote: 0, gate: 'off' });
+        }
+
+        this._advanceStep();
     }
 
     _getArpeggiatedNote() {

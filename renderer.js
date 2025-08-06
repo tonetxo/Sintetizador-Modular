@@ -24,6 +24,7 @@ import { Vocoder } from './modules/Vocoder.js';
 import { MathModule } from './modules/Math.js';
 import { NoiseGenerator } from './modules/NoiseGenerator.js';
 import { Arpeggiator } from './modules/Arpeggiator.js';
+import { Clock } from './modules/Clock.js';
 
 // DOM Elements
 const canvas = document.getElementById('synth-canvas');
@@ -42,7 +43,7 @@ const MODULE_CLASSES = {
   SampleAndHold, Sequencer, Osciloscopio, Delay,
   Compressor, Reverb, Keyboard, Math: MathModule,
   Microphone, AudioPlayer, Vocoder, NoiseGenerator,
-  Arpeggiator
+  Arpeggiator, Clock
 };
 
 let modules = [];
@@ -883,7 +884,8 @@ async function setup() {
       loadWorklet('RingMod', './worklets/ring-mod-processor.js'),
       loadWorklet('SampleAndHold', './worklets/sample-and-hold-processor.js'),
       loadWorklet('NoiseGenerator', './worklets/noise-generator-processor.js'),
-      loadWorklet('Gate', './worklets/gate-processor.js')
+      loadWorklet('Gate', './worklets/gate-processor.js'),
+      loadWorklet('Clock', './worklets/clock-processor.js')
     ]);
     const keyboard = new Keyboard(canvas.width / 2 - 125, canvas.height - 150, 'keyboard-main');
     modules.push(keyboard);

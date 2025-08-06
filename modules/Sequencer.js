@@ -44,19 +44,34 @@ export class Sequencer {
             'TENSION': { x: this.width, y: this.height - 80, type: 'cv', source: this.cvNode, orientation: 'horizontal' },
             'DISPARO': { x: this.width, y: this.height - 40, type: 'gate', source: this.gateNode, orientation: 'horizontal' },
         };
-        this.inputs = {};
+        this.inputs = {
+            'CLOCK_IN': { 
+                x: 0, y: this.height - 40, type: 'gate', target: null, orientation: 'horizontal',
+                connected: false, // Inicializar como no conectado
+                onConnect: () => { this.inputs['CLOCK_IN'].connected = true; this.updateWorkletState(); },
+                onDisconnect: () => { this.inputs['CLOCK_IN'].connected = false; this.updateWorkletState(); }
+            },
+        };
         this.readyPromise = this.initWorklet();
     }
 
     async initWorklet() {
         try {
-            this.workletNode = new AudioWorkletNode(audioContext, 'sequencer-processor');
+            this.workletNode = new AudioWorkletNode(audioContext, 'sequencer-processor', {
+                parameterData: {
+                    clock_in: 0,
+                }
+            });
             this.workletNode.port.onmessage = (e) => {
                 if (e.data.type === 'step') {
                     this.currentStep = e.data.step;
                     this.triggerStep(e.data.gate);
+                } else if (e.data.type === 'debug') {
+                    console.log(`[Sequencer-${this.id} Debug] ${e.data.message}`);
                 }
             };
+            // Asignar el target de CLOCK_IN después de que el workletNode esté listo
+            this.inputs['CLOCK_IN'].target = this.workletNode.parameters.get('clock_in');
             this.updateWorkletState();
         } catch (error) {
             console.error(`[Sequencer-${this.id}] Error initializing sequencer clock worklet:`, error);
@@ -98,7 +113,8 @@ export class Sequencer {
 
     updateWorkletState() {
         if (!this.workletNode) return;
-        this.workletNode.port.postMessage({ type: 'config', params: this.params });
+        const clockInConnected = this.inputs['CLOCK_IN'].connected;
+        this.workletNode.port.postMessage({ type: 'config', params: this.params, clockInConnected: clockInConnected });
     }
     
     handleClick(x, y) {
@@ -267,9 +283,53 @@ export class Sequencer {
         ctx.fillText(value, x + w / 2, y + h / 2); 
         this.hotspots[paramName] = { x, y, width: w, height: h, type: 'selector' }; 
     }
-    drawConnectors(ctx, hovered) { const connectorRadius = 8; ctx.font = '10px Arial'; Object.entries(this.outputs).forEach(([name, props]) => { const isHovered = hovered?.module === this && hovered?.connector.name === name; const ox = props.x, oy = props.y; ctx.beginPath(); ctx.arc(ox, oy, connectorRadius, 0, Math.PI * 2); ctx.fillStyle = isHovered ? 'white' : '#222'; ctx.fill(); ctx.strokeStyle = '#4a90e2'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'right'; ctx.fillText(name, ox - connectorRadius - 4, oy + 4); }); }
+    drawConnectors(ctx, hovered) {
+        const connectorRadius = 8;
+        ctx.font = '10px Arial';
+
+        // Draw outputs
+        Object.entries(this.outputs).forEach(([name, props]) => {
+            const isHovered = hovered?.module === this && hovered?.connector.name === name;
+            const ox = props.x, oy = props.y;
+            ctx.beginPath();
+            ctx.arc(ox, oy, connectorRadius, 0, Math.PI * 2);
+            ctx.fillStyle = isHovered ? 'white' : '#222';
+            ctx.fill();
+            ctx.strokeStyle = '#4a90e2';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = '#E0E0E0';
+            ctx.textAlign = 'right';
+            ctx.fillText(name, ox - connectorRadius - 4, oy + 4);
+        });
+
+        // Draw inputs
+        Object.entries(this.inputs).forEach(([name, props]) => {
+            const isHovered = hovered?.module === this && hovered?.connector.name === name;
+            const ix = props.x, iy = props.y;
+            ctx.beginPath();
+            ctx.arc(ix, iy, connectorRadius, 0, Math.PI * 2);
+            ctx.fillStyle = isHovered ? 'white' : '#222';
+            ctx.fill();
+            ctx.strokeStyle = '#e24a4a'; // Color para entradas
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = '#E0E0E0';
+            ctx.textAlign = 'left';
+            ctx.fillText(name, ix + connectorRadius + 4, iy + 4);
+        });
+    }
     isInside(pos, rect) { return pos.x >= rect.x && pos.x <= rect.x + rect.width && pos.y >= rect.y && pos.y <= rect.y + rect.height; }
-    getConnectorAt(x, y) { const localX = x - this.x, localY = y - this.y; for (const [name, props] of Object.entries(this.outputs)) if (Math.hypot(localX - props.x, localY - props.y) < 9) return { name, type: 'output', props, module: this }; return null; }
+    getConnectorAt(x, y) {
+        const localX = x - this.x, localY = y - this.y;
+        for (const [name, props] of Object.entries(this.outputs)) {
+            if (Math.hypot(localX - props.x, localY - props.y) < 9) return { name, type: 'output', props, module: this };
+        }
+        for (const [name, props] of Object.entries(this.inputs)) {
+            if (Math.hypot(localX - props.x, localY - props.y) < 9) return { name, type: 'input', props, module: this };
+        }
+        return null;
+    }
     getState() { return { id: this.id, type: this.type, x: this.x, y: this.y, ...this.params }; }
     setState(state) { this.id = state.id || this.id; this.x = state.x; this.y = state.y; Object.assign(this.params, state); this.updateWorkletState(); }
     disconnect() { this.cvNode?.disconnect(); this.gateNode?.disconnect(); this.workletNode?.port.close(); }
