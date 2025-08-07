@@ -3,8 +3,8 @@
     {
       "id": "keyboard-main",
       "type": "Keyboard",
-      "x": -235.9420000000001,
-      "y": -55.247000000000014,
+      "x": -227.4720000000001,
+      "y": -194.39700000000002,
       "isPermanent": true,
       "portamentoValue": 0.17307692307692307,
       "octave": 3
@@ -85,8 +85,8 @@
     {
       "id": "lfo-1754369061909",
       "type": "LFO",
-      "x": -509.50520661157054,
-      "y": -56.052685950413256,
+      "x": -203.3752066115705,
+      "y": 245.2373140495868,
       "rate": 8.727999687194824,
       "depth": 0.15391799807548523,
       "attack": 1.7119295494490399,
@@ -109,7 +109,7 @@
       "x": 418.35,
       "y": -236.43500000000006,
       "gain0": 1,
-      "gain1": 0.7096538543701172,
+      "gain1": 0.583717942237854,
       "gain2": 0,
       "gain3": 0
     },
@@ -126,15 +126,26 @@
     {
       "id": "sah-1754549718851",
       "type": "SampleAndHold",
-      "x": -303.052,
-      "y": 216.10500000000002
+      "x": -188.10199999999998,
+      "y": 49.125
     },
     {
       "id": "noise-gen-1754549743753",
       "type": "NoiseGenerator",
-      "x": -489.39200000000005,
-      "y": 295.96500000000003,
+      "x": -484.5520000000001,
+      "y": 331.055,
       "noiseType": 1
+    },
+    {
+      "id": "lfo-1754550494854",
+      "type": "LFO",
+      "x": -494.76000000000005,
+      "y": -40.870000000000076,
+      "rate": 0.5142135620117188,
+      "depth": 10,
+      "attack": 1.4994467499999997,
+      "waveform": "sine",
+      "isBypassed": false
     }
   ],
   "connections": [
@@ -235,12 +246,6 @@
       "toConnector": "CV 1"
     },
     {
-      "fromId": "lfo-1754369061909",
-      "fromConnector": "SALIDA",
-      "toId": "sah-1754549718851",
-      "toConnector": "IN"
-    },
-    {
       "fromId": "sah-1754549718851",
       "fromConnector": "OUT",
       "toId": "vco-1754196834506",
@@ -251,6 +256,18 @@
       "fromConnector": "Out",
       "toId": "sah-1754549718851",
       "toConnector": "TRIG"
+    },
+    {
+      "fromId": "lfo-1754550494854",
+      "fromConnector": "SALIDA",
+      "toId": "sah-1754549718851",
+      "toConnector": "IN"
+    },
+    {
+      "fromId": "keyboard-main",
+      "fromConnector": "DISPARO",
+      "toId": "lfo-1754550494854",
+      "toConnector": "Gate"
     }
   ]
 }

@@ -24,6 +24,10 @@ import { Vocoder } from './modules/Vocoder.js';
 import { MathModule } from './modules/Math.js';
 import { NoiseGenerator } from './modules/NoiseGenerator.js';
 import { Arpeggiator } from './modules/Arpeggiator.js';
+import { Chorus } from './modules/Chorus.js';
+import { Flanger } from './modules/Flanger.js';
+import { Phaser } from './modules/Phaser.js';
+import { BaseEffect } from './modules/BaseEffect.js';
 
 // DOM Elements
 const canvas = document.getElementById('synth-canvas');
@@ -41,7 +45,7 @@ const MODULE_CLASSES = {
   SampleAndHold, Sequencer, Osciloscopio, Delay,
   Compressor, Reverb, Keyboard, Math: MathModule,
   Microphone, AudioPlayer, Vocoder, NoiseGenerator,
-  Arpeggiator, Clock
+  Arpeggiator, Clock, Chorus, Flanger, Phaser
 };
 
 // Exponer función para que los módulos puedan registrarse para entrada de texto
@@ -725,7 +729,10 @@ async function setup() {
     { name: 'SampleAndHold', path: './worklets/sample-and-hold-processor.js' },
     { name: 'Sequencer', path: './worklets/sequencer-processor.js' },
     { name: 'VCO', path: './worklets/vco-processor.js' },
-    { name: 'Vocoder', path: './worklets/vocoder-processor.js' }
+    { name: 'Vocoder', path: './worklets/vocoder-processor.js' },
+    { name: 'Chorus', path: './worklets/chorus-processor.js' },
+    { name: 'Flanger', path: './worklets/flanger-processor.js' },
+    { name: 'Phaser', path: './worklets/phaser-processor.js' }
   ];
 
   await Promise.all(workletsToLoad.map(w => loadWorklet(w.name, w.path)));
@@ -794,25 +801,41 @@ function setupEventListeners() {
   canvas.addEventListener('wheel', onWheel, { passive: false });
   document.addEventListener('keydown', onKeyDown);
   document.addEventListener('keyup', onKeyUp);
+
+  // --- LÓGICA DE MENÚ CORREGIDA Y MEJORADA ---
   document.querySelectorAll('#context-menu .context-menu-item').forEach(item => {
-    item.addEventListener('click', async (e) => {
-      if (e.target.classList.contains('context-menu-has-submenu')) {
-        e.stopPropagation();
-        const submenu = e.target.querySelector('.context-submenu');
+    // Mostrar submenú al pasar el ratón
+    if (item.classList.contains('context-menu-has-submenu')) {
+      item.addEventListener('mouseenter', () => {
+        const submenu = item.querySelector('.context-submenu');
         if (submenu) {
-          submenu.style.left = `${e.target.offsetWidth}px`;
+          submenu.style.left = `${item.offsetWidth}px`;
           submenu.style.top = `0px`;
           submenu.style.display = 'block';
         }
+      });
+    }
+
+    // Añadir módulo al hacer clic
+    item.addEventListener('click', async (e) => {
+      // Si es un submenú, no hacer nada al hacer clic en el padre
+      if (e.currentTarget.classList.contains('context-menu-has-submenu')) {
+        e.stopPropagation();
         return;
       }
-      const moduleType = e.target.getAttribute('data-module');
-      const worldPos = screenToWorld(parseFloat(contextMenu.style.left), parseFloat(contextMenu.style.top));
-      await addModule(moduleType, worldPos.x, worldPos.y);
+      
+      const moduleType = e.currentTarget.getAttribute('data-module');
+      if (moduleType) {
+        const worldPos = screenToWorld(parseFloat(contextMenu.style.left), parseFloat(contextMenu.style.top));
+        await addModule(moduleType, worldPos.x, worldPos.y);
+      }
+      
+      // Ocultar todos los menús
       contextMenu.style.display = 'none';
       document.querySelectorAll('.context-submenu').forEach(sub => sub.style.display = 'none');
     });
   });
+
   window.addEventListener('click', (e) => {
     if (!contextMenu.contains(e.target)) {
       contextMenu.style.display = 'none';
