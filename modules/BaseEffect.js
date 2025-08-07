@@ -15,15 +15,16 @@ export class BaseEffect {
         
         this.knobHotspots = {};
         this.dragStart = null;
-        
-        // --- CAMBIO: Almacén local para los valores de los parámetros ---
         this.paramValues = {};
 
         this.workletNode = null;
         this.inputs = {};
         this.outputs = {};
         this.activeControl = null;
-        this.isBypassed = initialState.isBypassed || false;
+        
+        // --- CAMBIO: Unificar nombre de la variable a "bypassed" ---
+        this.bypassed = initialState.bypassed || false;
+        
         this.initialState = initialState;
     }
 
@@ -31,35 +32,61 @@ export class BaseEffect {
         try {
             this.workletNode = new AudioWorkletNode(audioContext, this.processorName);
 
-            // --- CAMBIO: Inicializar el almacén local de valores ---
             this.knobDefs.forEach(def => {
                 const param = this.workletNode.parameters.get(def.name);
                 if (param) {
                     const initialValue = this.initialState[def.name] !== undefined ? this.initialState[def.name] : def.initial;
                     param.value = initialValue;
-                    this.paramValues[def.name] = initialValue; // Guardar valor inicial
+                    this.paramValues[def.name] = initialValue;
                 }
             });
 
-            this.bypassNode = audioContext.createGain();
-            this.bypassNode.gain.value = this.isBypassed ? 0 : 1;
+            this.inputGain = audioContext.createGain();
+            this.dryGain = audioContext.createGain();
+            this.wetGain = audioContext.createGain();
+            this.outputGain = audioContext.createGain();
 
-            const inputGain = audioContext.createGain();
-            inputGain.connect(this.workletNode);
-            this.workletNode.connect(this.bypassNode);
+            this.inputGain.connect(this.workletNode);
+            this.inputGain.connect(this.dryGain);
+            this.workletNode.connect(this.wetGain);
+            this.dryGain.connect(this.outputGain);
+            this.wetGain.connect(this.outputGain);
 
-            this.inputs = { 'Entrada': { x: 0, y: this.height / 2, type: 'audio', target: inputGain, orientation: 'horizontal' } };
-            this.outputs = { 'Salida': { x: this.width, y: this.height / 2, type: 'audio', source: this.bypassNode, orientation: 'horizontal' } };
+            this.inputs = { 'Entrada': { x: 0, y: this.height / 2, type: 'audio', target: this.inputGain, orientation: 'horizontal' } };
+            this.outputs = { 'Salida': { x: this.width, y: this.height / 2, type: 'audio', source: this.outputGain, orientation: 'horizontal' } };
+            
+            this.updateBypassState();
+
         } catch (e) {
             console.error(`[${this.type}-${this.id}] Error initializing worklet:`, e);
         }
+    }
+    
+    updateBypassState() {
+        const rampTime = 0.01;
+        // --- CAMBIO: Usar "bypassed" ---
+        if (this.bypassed) {
+            this.dryGain.gain.setTargetAtTime(1, audioContext.currentTime, rampTime);
+            this.wetGain.gain.setTargetAtTime(0, audioContext.currentTime, rampTime);
+        } else {
+            this.dryGain.gain.setTargetAtTime(0, audioContext.currentTime, rampTime);
+            this.wetGain.gain.setTargetAtTime(1, audioContext.currentTime, rampTime);
+        }
+    }
+
+    toggleBypass() {
+        // --- CAMBIO: Usar "bypassed" ---
+        this.bypassed = !this.bypassed;
+        this.updateBypassState();
     }
 
     draw(ctx, isSelected, hoveredConnectorInfo) {
         ctx.save();
         ctx.translate(this.x, this.y);
 
-        ctx.fillStyle = this.isBypassed ? '#3a3a3a' : '#222';
+        // --- CAMBIO: Usar "bypassed" ---
+        ctx.fillStyle = this.bypassed ? '#555' : '#222';
+        
         ctx.strokeStyle = isSelected ? '#aaffff' : '#E0E0E0';
         ctx.lineWidth = 2;
         ctx.fillRect(0, 0, this.width, this.height);
@@ -73,9 +100,11 @@ export class BaseEffect {
         if (!this.workletNode) {
             ctx.fillStyle = 'red';
             ctx.fillText('ERROR', this.width / 2, this.height / 2);
-        } else if (this.isBypassed) {
+        // --- CAMBIO: Usar "bypassed" ---
+        } else if (this.bypassed) {
             ctx.fillStyle = '#aaa';
-            ctx.fillText('BYPASSED', this.width / 2, this.height / 2);
+            ctx.font = '12px Arial';
+            ctx.fillText('BYPASS', this.width / 2, this.height / 2);
         } else {
             this.drawKnobs(ctx);
         }
@@ -94,7 +123,6 @@ export class BaseEffect {
             const x = (this.width / (knobsPerRow + 1)) * (col + 1);
             const y = 60 + row * rowHeight;
             
-            // --- CAMBIO: Leer el valor del almacén local para dibujar ---
             const value = this.paramValues[def.name];
             if (value !== undefined) {
                 this.drawKnob(ctx, def.name, def.label, x, y, def.min, def.max, value, def.logarithmic);
@@ -184,7 +212,8 @@ export class BaseEffect {
     }
 
     checkInteraction(pos) {
-        if (this.isBypassed) return false;
+        // --- CAMBIO: Usar "bypassed" ---
+        if (this.bypassed) return false;
         const localPos = { x: pos.x - this.x, y: pos.y - this.y };
         
         for (const def of this.knobDefs) {
@@ -193,7 +222,6 @@ export class BaseEffect {
                 this.activeControl = def.name;
                 const param = this.workletNode.parameters.get(def.name);
                 param.cancelScheduledValues(audioContext.currentTime);
-                // --- CAMBIO: Leer el valor del almacén local al iniciar el arrastre ---
                 this.dragStart = { y: pos.y, value: this.paramValues[def.name] };
                 return true;
             }
@@ -225,10 +253,9 @@ export class BaseEffect {
         
         newValue = Math.max(def.min, Math.min(def.max, newValue));
         
-        // --- CAMBIO: Actualizar el valor local Y el parámetro de audio ---
-        this.paramValues[this.activeControl] = newValue; // Para la UI
+        this.paramValues[this.activeControl] = newValue;
         const param = this.workletNode.parameters.get(def.name);
-        param.setTargetAtTime(newValue, audioContext.currentTime, 0.01); // Para el sonido
+        param.setTargetAtTime(newValue, audioContext.currentTime, 0.01);
     }
     
     endInteraction() {
@@ -255,9 +282,10 @@ export class BaseEffect {
     getState() {
         if (!this.workletNode) return { id: this.id, type: this.type, x: this.x, y: this.y, error: true };
         const state = {
-            id: this.id, type: this.type, x: this.x, y: this.y, isBypassed: this.isBypassed
+            id: this.id, type: this.type, x: this.x, y: this.y, 
+            // --- CAMBIO: Usar "bypassed" ---
+            bypassed: this.bypassed
         };
-        // --- CAMBIO: Guardar el estado desde el almacén local ---
         this.knobDefs.forEach(def => {
             state[def.name] = this.paramValues[def.name];
         });
@@ -269,10 +297,10 @@ export class BaseEffect {
         this.id = state.id || this.id;
         this.x = state.x;
         this.y = state.y;
-        this.isBypassed = state.isBypassed || false;
-        this.bypassNode.gain.value = this.isBypassed ? 0 : 1;
+        // --- CAMBIO: Usar "bypassed" ---
+        this.bypassed = state.bypassed || false;
+        this.updateBypassState();
 
-        // --- CAMBIO: Restaurar el estado en el almacén local y en el parámetro ---
         this.knobDefs.forEach(def => {
             if (state[def.name] !== undefined) {
                 const value = state[def.name];
@@ -282,17 +310,11 @@ export class BaseEffect {
         });
     }
 
-    toggleBypass() {
-        if (!this.bypassNode) return;
-        this.isBypassed = !this.isBypassed;
-        this.bypassNode.gain.setTargetAtTime(this.isBypassed ? 0 : 1, audioContext.currentTime, 0.01);
-    }
-
     disconnect() {
-        if (this.workletNode) {
-            this.workletNode.disconnect();
-            this.workletNode.port.close();
-        }
-        if (this.bypassNode) this.bypassNode.disconnect();
+        this.inputGain?.disconnect();
+        this.workletNode?.disconnect();
+        this.dryGain?.disconnect();
+        this.wetGain?.disconnect();
+        this.outputGain?.disconnect();
     }
 }
