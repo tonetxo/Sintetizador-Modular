@@ -29,6 +29,7 @@ export class GranularSampler {
 
     async initWorklet(initialState) {
         try {
+            await audioContext.audioWorklet.addModule('./worklets/granular-processor.js');
             this.workletNode = new AudioWorkletNode(audioContext, 'granular-processor');
             this.output = this.workletNode;
 
@@ -58,13 +59,13 @@ export class GranularSampler {
         }
     }
     
-    // Este método será llamado desde renderer.js cuando el audio esté decodificado
-    loadDecodedData({ decodedData }) {
-        if (this.workletNode && decodedData.channelData[0]) {
-            const audioData = decodedData.channelData[0]; // Usamos solo el canal izquierdo
-            this.audioBuffer = audioData; // Guardar para dibujar
+    // ***** CORRECCIÓN APLICADA: Firma del método y manejo de datos *****
+    loadDecodedData(decodedData) {
+        if (this.workletNode && decodedData.channelData && decodedData.channelData.length > 0) {
+            const audioData = decodedData.channelData[0]; // Esto ahora es un Float32Array
+            this.audioBuffer = audioData; // Guardar para dibujar la forma de onda
             
-            // Enviamos el buffer al worklet. El segundo argumento lo transfiere sin copiarlo (más rápido).
+            // Enviamos el buffer al worklet, transfiriendo la propiedad del ArrayBuffer subyacente.
             this.workletNode.port.postMessage(
                 { type: 'audioBuffer', buffer: audioData },
                 [audioData.buffer]
@@ -155,10 +156,7 @@ export class GranularSampler {
         ctx.lineTo(indicatorX, rect.y + rect.height);
         ctx.stroke();
     }
-
-    // Copia los métodos de dibujo de knobs, conectores y manejo de interacciones de otros módulos
-    // (drawKnob, drawConnectors, checkInteraction, handleDragInteraction, endInteraction, getConnectorAt, etc.)
-    // ...
+    
     drawKnob(ctx, paramName, label, x, y, min, max, value, isActive) {
         const knobRadius = 22;
         const angleRange = Math.PI * 1.5;
@@ -264,8 +262,8 @@ export class GranularSampler {
         
         if (state.audioFilePath) {
             this.audioFilePath = state.audioFilePath;
-            // Carga automáticamente el sample al restaurar el patch
-            window.electronAPI.loadPatchAudioFile(this.audioFilePath, this.id);
+            // ***** CORRECCIÓN APLICADA: Llamar a la función correcta de la API *****
+            window.electronAPI.decodeAudioFile(this.audioFilePath, this.id);
         }
         
         this.updateParams();

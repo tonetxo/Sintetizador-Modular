@@ -1,5 +1,4 @@
 // modules/Phaser.js
-import { audioContext } from './AudioContext.js';
 import { BaseEffect } from './BaseEffect.js';
 
 export class Phaser extends BaseEffect {

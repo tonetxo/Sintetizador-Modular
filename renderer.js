@@ -3,6 +3,8 @@ console.log('[DEBUG] renderer.js script started');
 window.electronAPI.logMessage('[DEBUG] renderer.js script started');
 
 import { audioContext, onAudioReady } from './modules/AudioContext.js';
+import { Visualizer } from './modules/Visualizer.js';
+
 import { VCO } from './modules/VCO.js';
 import { VCF } from './modules/VCF.js';
 import { ADSR } from './modules/ADSR.js';
@@ -27,19 +29,14 @@ import { Arpeggiator } from './modules/Arpeggiator.js';
 import { Chorus } from './modules/Chorus.js';
 import { Flanger } from './modules/Flanger.js';
 import { Phaser } from './modules/Phaser.js';
-import { BaseEffect } from './modules/BaseEffect.js';
 
-// DOM Elements
 const canvas = document.getElementById('synth-canvas');
 const ctx = canvas.getContext('2d');
 const contextMenu = document.getElementById('context-menu');
 const patchContextMenu = document.getElementById('patch-context-menu');
-const visualizerCanvas = document.getElementById('visualizer-canvas');
-const visualizerCtx = visualizerCanvas.getContext('2d');
 const visualizerContextMenu = document.getElementById('visualizer-context-menu');
 const errorMessage = document.getElementById('error-message');
 
-// Application State
 const MODULE_CLASSES = {
   VCO, VCF, ADSR, VCA, LFO, Mixer, RingMod,
   SampleAndHold, Sequencer, Osciloscopio, Delay,
@@ -48,7 +45,6 @@ const MODULE_CLASSES = {
   Arpeggiator, Clock, Chorus, Flanger, Phaser
 };
 
-// Exponer función para que los módulos puedan registrarse para entrada de texto
 window.setActiveTextInputModule = (module) => {
   activeTextInputModule = module;
 };
@@ -65,50 +61,40 @@ let patchStart = null;
 let isPanning = false;
 let mousePos = { x: 0, y: 0 };
 let hoveredConnectorInfo = null;
-let activeTextInputModule = null; // <--- AÑADIDO: Módulo que recibe texto
-let analyser = null;
-let dataArray = null;
+let activeTextInputModule = null;
 let isDraggingVisualizer = false;
 let visualizerDragOffset = { x: 0, y: 0 };
-let currentVisualStyle = 'bars';
+
+let analyser = null;
+let visualizer = null;
+let mediaRecorder;
+let audioChunks = [];
+let isRecording = false;
+let mediaStreamDestination;
+let masterGain;
+let recordGain;
+let inputGain;
+let postCompressorGain;
+
 
 const view = { x: 0, y: 0, zoom: 1, minZoom: 0.2, maxZoom: 2.0 };
 const CABLE_COLORS = { audio: '#f0a048', cv: '#ff80ab', gate: '#ff80ab' };
 
-function screenToWorld(x, y) {
-  return { x: (x - view.x) / view.zoom, y: (y - view.y) / view.zoom };
-}
-
-function showError(message, duration = 5000) {
-  errorMessage.textContent = message;
-  errorMessage.style.display = 'block';
-  setTimeout(() => errorMessage.style.display = 'none', duration);
-}
-
-async function loadWorklet(workletName, workletPath) {
-  try {
-    await audioContext.audioWorklet.addModule(workletPath);
-    console.log(`${workletName} worklet loaded successfully`);
-  } catch (error) {
-    console.error(`Failed to load ${workletName} worklet:`, error);
-    showError(`Error loading ${workletName} module.`);
-  }
-}
-
-async function initAudioContext() {
-  return new Promise((resolve) => {
-    onAudioReady(() => {
-      console.log('AudioContext ready for use');
-      resolve();
-    });
-  });
-}
+function screenToWorld(x, y) { return { x: (x - view.x) / view.zoom, y: (y - view.y) / view.zoom }; }
+function showError(message, duration = 5000) { errorMessage.textContent = message; errorMessage.style.display = 'block'; setTimeout(() => errorMessage.style.display = 'none', duration); }
+async function loadWorklet(workletName, workletPath) { try { await audioContext.audioWorklet.addModule(workletPath); console.log(`${workletName} worklet loaded successfully`); } catch (error) { console.error(`Failed to load ${workletName} worklet:`, error); showError(`Error loading ${workletName} module.`); } }
+async function initAudioContext() { return new Promise((resolve) => { onAudioReady(() => { console.log('AudioContext ready for use'); resolve(); }); }); }
 
 function draw() {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.restore();
+
+  if (visualizer) {
+    visualizer.draw(analyser);
+  }
+
   ctx.save();
   ctx.translate(view.x, view.y);
   ctx.scale(view.zoom, view.zoom);
@@ -116,8 +102,8 @@ function draw() {
   drawConnections();
   if (isPatching) drawActivePatch();
   drawModules();
-  drawAudioVisualization();
   ctx.restore();
+  
   requestAnimationFrame(draw);
 }
 
@@ -183,79 +169,6 @@ function drawModules() {
   });
 }
 
-function drawAudioVisualization() {
-    if (!analyser || !dataArray) return;
-    analyser.getByteFrequencyData(dataArray);
-    visualizerCtx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
-    if (currentVisualStyle === 'bars') drawBarsVisualization();
-    else drawConcentricWavesVisualization();
-}
-
-function drawBarsVisualization() {
-    const { width, height } = visualizerCanvas;
-    const barWidth = (width / dataArray.length) * 2.5;
-    let x = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-        const barHeight = (dataArray[i] / 255.0) * height;
-        visualizerCtx.fillStyle = `rgb(${dataArray[i] + 100}, 50, 50)`;
-        visualizerCtx.fillRect(x, height - barHeight, barWidth, barHeight);
-        x += barWidth + 1;
-    }
-}
-
-function drawConcentricWavesVisualization() {
-    const { width, height } = visualizerCanvas;
-    visualizerCtx.fillStyle = '#1a1a1a';
-    visualizerCtx.fillRect(0, 0, width, height);
-    const bufferLength = dataArray.length;
-    const lowFreqBand = Math.floor(bufferLength * 0.05);
-    const midFreqBand = Math.floor(bufferLength * 0.25);
-    let lowEnergy = 0, midEnergy = 0, highEnergy = 0, totalEnergy = 0;
-    for (let i = 0; i < bufferLength; i++) {
-        const value = dataArray[i] * dataArray[i];
-        totalEnergy += value;
-        if (i < lowFreqBand) lowEnergy += value;
-        else if (i < midFreqBand) midEnergy += value;
-        else highEnergy += value;
-    }
-    const rms = Math.sqrt(totalEnergy / bufferLength);
-    if (rms < 1) return;
-    const sumOfBandEnergies = lowEnergy + midEnergy + highEnergy;
-    const normalizedLow = sumOfBandEnergies > 0 ? lowEnergy / sumOfBandEnergies : 0;
-    const normalizedMid = sumOfBandEnergies > 0 ? midEnergy / sumOfBandEnergies : 0;
-    const normalizedHigh = sumOfBandEnergies > 0 ? highEnergy / sumOfBandEnergies : 0;
-    let weightedSum = 0, totalWeight = 0;
-    for (let i = 1; i < bufferLength; i++) {
-        weightedSum += i * dataArray[i];
-        totalWeight += dataArray[i];
-    }
-    const averageIndex = totalWeight === 0 ? 0 : weightedSum / totalWeight;
-    const originX = width * 0.1 + (averageIndex / bufferLength) * (width * 0.8);
-    const originY = height * 0.1 + (rms / 255) * (height * 0.8);
-    const numCircles = 1 + Math.floor(rms / 20);
-    const maxRadius = Math.max(10, (rms / 255) * (width * 0.2) + (normalizedLow * width * 0.1));
-    const lineWidth = Math.max(1, 1 + (normalizedHigh * 5));
-    let hue = (averageIndex / bufferLength) * 360;
-    if (normalizedLow > 0.5) hue = 0;
-    else if (normalizedMid > 0.5) hue = 120;
-    else if (normalizedHigh > 0.5) hue = 240;
-    visualizerCtx.shadowBlur = rms / 10;
-    visualizerCtx.shadowColor = `hsla(${hue}, 100%, 70%, 0.7)`;
-    for (let i = 1; i <= numCircles; i++) {
-        const radius = (i / numCircles) * maxRadius;
-        const alpha = 1 - (i / numCircles);
-        visualizerCtx.strokeStyle = `hsla(${hue}, 100%, 60%, ${alpha * 0.8})`;
-        visualizerCtx.fillStyle = `hsla(${hue}, 100%, 50%, ${alpha * 0.1})`;
-        visualizerCtx.lineWidth = lineWidth;
-        visualizerCtx.beginPath();
-        visualizerCtx.arc(originX, originY, radius, 0, Math.PI * 2);
-        visualizerCtx.stroke();
-        visualizerCtx.fill();
-    }
-    visualizerCtx.shadowBlur = 0;
-}
-
-
 function updateModuleUI(module) {
   if (module.ui) {
     const screenX = module.x * view.zoom + view.x;
@@ -277,15 +190,11 @@ function connectNodes(sourceConnector, destConnector) {
       console.error("Invalid source node for connection");
       return;
     }
-    
-    // Ejecutar el handler onConnect si existe
     if (destConnector.onConnect && typeof destConnector.onConnect === 'function') {
       destConnector.onConnect(sourceNode);
     }
-
     const destTargets = Array.isArray(destConnector.target) ? destConnector.target : [destConnector.target];
     const validDestTargets = destTargets.filter(node => node != null);
-    
     if (validDestTargets.length > 0) {
         const outputIndex = sourceConnector.port || 0;
         validDestTargets.forEach(destNode => {
@@ -306,15 +215,11 @@ function disconnectNodes(sourceConnector, destConnector) {
   try {
     const sourceNode = sourceConnector.source;
     if (!sourceNode) return;
-
-    // Ejecutar el handler onDisconnect si existe
     if (destConnector.onDisconnect && typeof destConnector.onDisconnect === 'function') {
       destConnector.onDisconnect(sourceNode);
     }
-    
     const destTargets = Array.isArray(destConnector.target) ? destConnector.target : [destConnector.target];
     const validDestTargets = destTargets.filter(node => node != null);
-
     if (validDestTargets.length > 0) {
         const outputIndex = sourceConnector.port || 0;
         validDestTargets.forEach(destNode => {
@@ -388,10 +293,7 @@ async function loadPatch() {
 
 async function reconstructPatch(patchData) {
   try {
-    modules.filter(m => !m.isPermanent).forEach(m => {
-      m.disconnect?.();
-      if (m.ui) m.ui.remove();
-    });
+    modules.filter(m => !m.isPermanent).forEach(m => { m.disconnect?.(); if (m.ui) m.ui.remove(); });
     modules = modules.filter(m => m.isPermanent);
     connections = [];
     selectedModules = [];
@@ -467,6 +369,12 @@ function getConnectionAt(x, y) {
 }
 
 async function addModule(type, x, y) {
+  if (type === 'Visualizer') {
+    const visualizerModule = document.getElementById('visualizer-module');
+    visualizerModule.style.display = 'block';
+    visualizer = new Visualizer('visualizer-canvas');
+    return;
+  }
   const ModuleClass = MODULE_CLASSES[type];
   if (!ModuleClass) return;
   const newModule = new ModuleClass(x, y);
@@ -476,65 +384,94 @@ async function addModule(type, x, y) {
   if (type === 'AudioPlayer') createAudioPlayerUI(newModule);
 }
 
-function createAudioPlayerUI(module) {
-  const template = document.getElementById('audio-player-template');
-  if (!template) return;
-  const ui = template.content.cloneNode(true);
-  const uiContainer = document.createElement('div');
-  uiContainer.appendChild(ui);
-  document.body.appendChild(uiContainer);
-  module.ui = uiContainer.firstElementChild;
-  module.ui.id = `audioplayer-ui-${module.id}`;
-  const fileInput = module.ui.querySelector('.audio-file-input');
-  fileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      try {
-        const result = await window.electronAPI.decodeAudioFile(file.path, module.id);
-        if (result.success) module.loadDecodedData(result.decodedData);
-        else showError(`Fallo al decodificar: ${result.error}`);
-      } catch (error) {
-        showError(`Error durante la decodificación: ${error.message}`);
-      }
+function toggleRecording() {
+    if (isRecording) {
+        mediaRecorder.stop();
+        isRecording = false;
+        console.log('Recording stopped.');
+    } else {
+        mediaRecorder.start();
+        isRecording = true;
+        console.log('Recording started.');
     }
-  });
-  const playStopBtn = module.ui.querySelector('.play-stop-btn');
-  playStopBtn.addEventListener('click', () => {
-    if (module.isPlaying) module.stop();
-    else module.play();
-  });
-  module.onPlaybackStateChange = (isPlaying) => {
-    if (playStopBtn) playStopBtn.textContent = isPlaying ? 'Stop' : 'Play';
-  };
-  const loopCheckbox = module.ui.querySelector('.loop-checkbox');
-  loopCheckbox.addEventListener('change', (e) => {
-    module.loop = e.target.checked;
-    if (module.source) module.source.loop = module.loop;
-  });
-  module.ui.addEventListener('mousedown', (e) => {
-    const targetTag = e.target.tagName.toUpperCase();
-    if (targetTag !== 'BUTTON' && targetTag !== 'INPUT' && targetTag !== 'LABEL') {
-      e.stopPropagation();
-    }
-  });
 }
+
+async function handleLoadAudioForPlayer(audioPlayerModule) {
+  try {
+    const result = await window.electronAPI.openAudioFileDialog();
+    if (result.success && result.filePath) {
+      showError('Decodificando audio...', 3000);
+      // ***** CORRECCIÓN APLICADA: No se necesita 'await' aquí ya que la respuesta viene por un evento *****
+      window.electronAPI.decodeAudioFile(result.filePath, audioPlayerModule.id);
+    } else if (result.error) {
+      showError(`Error al abrir archivo: ${result.error}`, 5000);
+    }
+  } catch (error) {
+    console.error('Error al cargar archivo de audio:', error);
+    showError('Error al cargar archivo de audio.', 5000);
+  }
+}
+
+function createAudioPlayerUI(audioPlayerModule) {
+  const uiContainer = document.createElement('div');
+  uiContainer.className = 'audio-player-ui';
+  uiContainer.style.position = 'absolute';
+  uiContainer.style.background = '#333';
+  uiContainer.style.border = '1px solid #555';
+  uiContainer.style.padding = '10px';
+  uiContainer.style.borderRadius = '5px';
+  uiContainer.style.color = '#eee';
+  uiContainer.style.width = '180px';
+  uiContainer.style.height = '60px';
+  uiContainer.style.display = 'none'; // Hidden by default, managed by updateModuleUI
+
+  const playStopButton = document.createElement('button');
+  playStopButton.textContent = audioPlayerModule.isPlaying ? 'Stop' : 'Play';
+  playStopButton.style.width = '80px';
+  playStopButton.style.height = '30px';
+  playStopButton.style.marginRight = '10px';
+  playStopButton.onclick = () => {
+    if (audioPlayerModule.isPlaying) {
+      audioPlayerModule.stop();
+    } else {
+      audioPlayerModule.play();
+    }
+    playStopButton.textContent = audioPlayerModule.isPlaying ? 'Stop' : 'Play';
+  };
+  uiContainer.appendChild(playStopButton);
+
+  const loopToggleButton = document.createElement('button');
+  loopToggleButton.textContent = audioPlayerModule.loop ? 'Loop ON' : 'Loop OFF';
+  loopToggleButton.style.width = '80px';
+  loopToggleButton.style.height = '30px';
+  loopToggleButton.onclick = () => {
+    audioPlayerModule.loop = !audioPlayerModule.loop;
+    if (audioPlayerModule.source) {
+      audioPlayerModule.source.loop = audioPlayerModule.loop;
+    }
+    loopToggleButton.textContent = audioPlayerModule.loop ? 'Loop ON' : 'Loop OFF';
+  };
+  uiContainer.appendChild(loopToggleButton);
+
+  // Update button text when playback state changes from module
+  audioPlayerModule.onPlaybackStateChange = (isPlaying) => {
+    playStopButton.textContent = isPlaying ? 'Stop' : 'Play';
+  };
+
+  document.body.appendChild(uiContainer);
+  audioPlayerModule.ui = uiContainer; // Attach UI element to module for easy access
+}
+
 
 function onMouseDown(e) {
   e.preventDefault();
-
-  // Si se está editando texto y se hace clic fuera, se finaliza la edición.
   if (activeTextInputModule && !getModuleAt(screenToWorld(e.clientX, e.clientY).x, screenToWorld(e.clientX, e.clientY).y) === activeTextInputModule) {
-    activeTextInputModule.handleKey('Enter'); // Simula 'Enter' para confirmar
+    activeTextInputModule.handleKey('Enter');
   }
-
   if (interactingModule) return;
   mousePos = { x: e.clientX, y: e.clientY };
   const worldPos = screenToWorld(mousePos.x, mousePos.y);
-  if (e.button === 1 || e.altKey) {
-    isPanning = true;
-    canvas.classList.add('grabbing');
-    return;
-  }
+  if (e.button === 1 || e.altKey) { isPanning = true; canvas.classList.add('grabbing'); return; }
   if (e.button === 0) {
     patchContextMenu.style.display = 'none';
     const connectorHit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
@@ -563,11 +500,7 @@ function onMouseDown(e) {
       return;
     }
     const connectionHit = getConnectionAt(worldPos.x, worldPos.y);
-    if (connectionHit) {
-      selectedConnection = connectionHit;
-      selectedModules = [];
-      return;
-    }
+    if (connectionHit) { selectedConnection = connectionHit; selectedModules = []; return; }
     selectedModules = [];
     selectedConnection = null;
     isPanning = true;
@@ -582,9 +515,8 @@ function onMouseMove(e) {
   const hit = getModuleAndConnectorAt(worldPos.x, worldPos.y);
   hoveredConnectorInfo = hit;
   canvas.style.cursor = hit ? 'pointer' : (isPanning ? 'grabbing' : 'grab');
-  if (interactingModule?.handleMouseDrag?.(worldPos.x, worldPos.y) || interactingModule?.handleDragInteraction?.(worldPos)) {
-    // handled
-  } else if (draggingModule) {
+  if (interactingModule?.handleMouseDrag?.(worldPos.x, worldPos.y) || interactingModule?.handleDragInteraction?.(worldPos)) return; 
+  else if (draggingModule) {
     const dx = (worldPos.x - dragOffset.x) - draggingModule.x;
     const dy = (worldPos.y - dragOffset.y) - draggingModule.y;
     if (selectedModules.includes(draggingModule)) {
@@ -624,59 +556,96 @@ function onContextMenu(e) {
   e.preventDefault();
   const worldPos = screenToWorld(e.clientX, e.clientY);
   const moduleHit = getModuleAt(worldPos.x, worldPos.y);
-  if (moduleHit) showModuleContextMenu(moduleHit, e.clientX, e.clientY);
-  else {
+
+  if (moduleHit) {
+    const interaction = moduleHit.checkInteraction ? moduleHit.checkInteraction(worldPos) : 'module';
+    showModuleContextMenu(moduleHit, e.clientX, e.clientY, interaction);
+  } else {
     contextMenu.style.left = `${e.clientX}px`;
     contextMenu.style.top = `${e.clientY}px`;
     contextMenu.style.display = 'block';
   }
 }
 
-function showModuleContextMenu(module, x, y) {
+function showModuleContextMenu(module, x, y, interaction) {
   patchContextMenu.innerHTML = '';
   patchContextMenu.style.left = `${x}px`;
   patchContextMenu.style.top = `${y}px`;
   patchContextMenu.style.display = 'block';
+
+  if (module.id === 'output-main' && interaction === 'speaker') {
+    const recordItem = document.createElement('div');
+    recordItem.className = 'context-menu-item';
+    recordItem.textContent = isRecording ? 'Detener Grabación' : 'Iniciar Grabación';
+    recordItem.onclick = () => {
+      toggleRecording();
+      patchContextMenu.style.display = 'none';
+    };
+    patchContextMenu.appendChild(recordItem);
+  } else if (module.type === 'AudioPlayer') {
+    const loadAudioItem = document.createElement('div');
+    loadAudioItem.className = 'context-menu-item';
+    loadAudioItem.textContent = 'Cargar Audio';
+    loadAudioItem.onclick = async () => {
+      await handleLoadAudioForPlayer(module);
+      patchContextMenu.style.display = 'none';
+    };
+    patchContextMenu.appendChild(loadAudioItem);
+
+    const playStopItem = document.createElement('div');
+    playStopItem.className = 'context-menu-item';
+    playStopItem.textContent = module.isPlaying ? 'Detener' : 'Reproducir';
+    playStopItem.onclick = () => {
+      if (module.isPlaying) {
+        module.stop();
+      } else {
+        module.play();
+      }
+      patchContextMenu.style.display = 'none';
+    };
+    patchContextMenu.appendChild(playStopItem);
+
+    const loopToggleItem = document.createElement('div');
+    loopToggleItem.className = 'context-menu-item';
+    loopToggleItem.textContent = module.loop ? 'Desactivar Loop' : 'Activar Loop';
+    loopToggleItem.onclick = () => {
+      module.loop = !module.loop;
+      if (module.source) { // Update the loop property on the current source if it exists
+        module.source.loop = module.loop;
+      }
+      patchContextMenu.style.display = 'none';
+    };
+    patchContextMenu.appendChild(loopToggleItem);
+  }
+
   const duplicateItem = document.createElement('div');
   duplicateItem.className = 'context-menu-item';
   duplicateItem.textContent = 'Duplicar Módulo';
-  duplicateItem.onclick = () => {
-    const state = module.getState();
-    addModule(state.type, state.x + 20, state.y + 20);
-    patchContextMenu.style.display = 'none';
-  };
+  duplicateItem.onclick = () => { const state = module.getState(); addModule(state.type, state.x + 20, state.y + 20); patchContextMenu.style.display = 'none'; };
   patchContextMenu.appendChild(duplicateItem);
+
   if (!module.isPermanent) {
     const deleteItem = document.createElement('div');
     deleteItem.className = 'context-menu-item';
     deleteItem.textContent = 'Eliminar Módulo';
-    deleteItem.onclick = () => {
-      selectedModules = [module];
-      deleteSelection();
-      patchContextMenu.style.display = 'none';
-    };
+    deleteItem.onclick = () => { selectedModules = [module]; deleteSelection(); patchContextMenu.style.display = 'none'; };
     patchContextMenu.appendChild(deleteItem);
   }
   if (typeof module.toggleBypass === 'function') {
     const bypassItem = document.createElement('div');
     bypassItem.className = 'context-menu-item';
     bypassItem.textContent = module.bypassed ? 'Activar Módulo' : 'Bypass Módulo';
-    bypassItem.onclick = () => {
-      module.toggleBypass();
-      patchContextMenu.style.display = 'none';
-    };
+    bypassItem.onclick = () => { module.toggleBypass(); patchContextMenu.style.display = 'none'; };
     patchContextMenu.appendChild(bypassItem);
   }
 }
 
 function onKeyDown(e) {
-  // Si un módulo está capturando texto, se lo enviamos y detenemos.
   if (activeTextInputModule) {
     activeTextInputModule.handleKey(e.key);
     e.preventDefault();
     return;
   }
-
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
@@ -687,10 +656,7 @@ function onKeyDown(e) {
 }
 
 function onKeyUp(e) {
-  if (activeTextInputModule) {
-    e.preventDefault();
-    return;
-  }
+  if (activeTextInputModule) { e.preventDefault(); return; }
   if (e.target.tagName === 'INPUT') return;
   const keyboardModule = modules.find(m => m instanceof Keyboard);
   if (keyboardModule) keyboardModule.handleKeyUp(e.key.toLowerCase());
@@ -711,28 +677,67 @@ async function setup() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
   await initAudioContext();
+  
+  inputGain = audioContext.createGain();
+  masterGain = audioContext.createGain();
+  recordGain = audioContext.createGain();
+  postCompressorGain = audioContext.createGain();
+  
+  masterGain.gain.value = 1.5;
+  recordGain.gain.value = 2.0;
+  postCompressorGain.gain.value = 1.5;
+
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 2048;
-  dataArray = new Uint8Array(analyser.frequencyBinCount);
+  mediaStreamDestination = audioContext.createMediaStreamDestination();
 
-  // --- CORRECCIÓN: Lista explícita de worklets a cargar ---
+  // Ruta de audio principal
+  inputGain.connect(masterGain);
+  inputGain.connect(recordGain);
+
+  // Ruta para escuchar (altavoces)
+  masterGain.connect(analyser);
+  analyser.connect(audioContext.destination);
+
+  // Ruta para grabar
+  const compressorNode = audioContext.createDynamicsCompressor();
+  compressorNode.threshold.value = -20; // dB
+  compressorNode.knee.value = 30; // dB
+  compressorNode.ratio.value = 4; // 4:1
+  compressorNode.attack.value = 0.01; // seconds
+  compressorNode.release.value = 0.5; // seconds
+
+  recordGain.connect(compressorNode);
+  compressorNode.connect(postCompressorGain);
+  postCompressorGain.connect(mediaStreamDestination);
+
+  mediaRecorder = new MediaRecorder(mediaStreamDestination.stream);
+  mediaRecorder.ondataavailable = event => {
+      audioChunks.push(event.data);
+  };
+  mediaRecorder.onstop = () => {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      audioChunks = [];
+      const reader = new FileReader();
+      reader.onload = () => {
+          const buffer = reader.result;
+          window.electronAPI.saveRecording(buffer);
+      };
+      reader.readAsArrayBuffer(audioBlob);
+  };
+
+
+  document.getElementById('visualizer-module').style.display = 'none';
+
   const workletsToLoad = [
-    { name: 'ADSR', path: './worklets/adsr-processor.js' },
-    { name: 'Arpeggiator', path: './worklets/arpeggiator-processor.js' },
-    { name: 'Clock', path: './worklets/clock-processor.js' },
-    { name: 'Gate', path: './worklets/gate-processor.js' },
-    { name: 'LFO', path: './worklets/lfo-processor.js' },
-    { name: 'Math', path: './worklets/math-processor.js' },
-    { name: 'NoiseGenerator', path: './worklets/noise-generator-processor.js' },
-    { name: 'PWM', path: './worklets/pwm-processor.js' },
-    { name: 'RingMod', path: './worklets/ring-mod-processor.js' },
-    { name: 'SampleAndHold', path: './worklets/sample-and-hold-processor.js' },
-    { name: 'Sequencer', path: './worklets/sequencer-processor.js' },
-    { name: 'VCO', path: './worklets/vco-processor.js' },
-    { name: 'Vocoder', path: './worklets/vocoder-processor.js' },
-    { name: 'Chorus', path: './worklets/chorus-processor.js' },
-    { name: 'Flanger', path: './worklets/flanger-processor.js' },
-    { name: 'Phaser', path: './worklets/phaser-processor.js' }
+    { name: 'ADSR', path: './worklets/adsr-processor.js' }, { name: 'Arpeggiator', path: './worklets/arpeggiator-processor.js' },
+    { name: 'Clock', path: './worklets/clock-processor.js' }, { name: 'Gate', path: './worklets/gate-processor.js' },
+    { name: 'LFO', path: './worklets/lfo-processor.js' }, { name: 'Math', path: './worklets/math-processor.js' },
+    { name: 'NoiseGenerator', path: './worklets/noise-generator-processor.js' }, { name: 'PWM', path: './worklets/pwm-processor.js' },
+    { name: 'RingMod', path: './worklets/ring-mod-processor.js' }, { name: 'SampleAndHold', path: './worklets/sample-and-hold-processor.js' },
+    { name: 'Sequencer', path: './worklets/sequencer-processor.js' }, { name: 'VCO', path: './worklets/vco-processor.js' },
+    { name: 'Vocoder', path: './worklets/vocoder-processor.js' }, { name: 'Chorus', path: './worklets/chorus-processor.js' },
+    { name: 'Flanger', path: './worklets/flanger-processor.js' }, { name: 'Phaser', path: './worklets/phaser-processor.js' }
   ];
 
   await Promise.all(workletsToLoad.map(w => loadWorklet(w.name, w.path)));
@@ -742,12 +747,12 @@ async function setup() {
   
   const outputModule = {
     id: 'output-main', x: canvas.width / 2 - 50, y: 50, width: 100, height: 80, isPermanent: true, type: 'Output',
-    inputs: { 'audio': { x: 0, y: 40, type: 'audio', get target() { return analyser; }, orientation: 'horizontal' } },
+    inputs: { 'audio': { x: 0, y: 40, type: 'audio', get target() { return inputGain; }, orientation: 'horizontal' } },
     outputs: {},
     draw: function(ctx, isSelected) {
       ctx.save();
       ctx.translate(this.x, this.y);
-      ctx.fillStyle = '#1a1a1a';
+      ctx.fillStyle = isRecording ? '#ff4d4d' : '#1a1a1a';
       ctx.strokeStyle = isSelected ? '#aaffff' : '#888';
       ctx.lineWidth = 2;
       ctx.fillRect(0, 0, this.width, this.height);
@@ -784,11 +789,20 @@ async function setup() {
       }
       return null;
     },
+    checkInteraction: function(worldPos) {
+      const localX = worldPos.x - this.x;
+      const localY = worldPos.y - this.y;
+      const speakerX = this.width / 2;
+      const speakerY = this.height / 2;
+      if (localX > speakerX - 25 && localX < speakerX + 25 && localY > speakerY - 25 && localY < speakerY + 25) {
+        return 'speaker';
+      }
+      return 'module';
+    },
     getState: function() { return { id: this.id, type: this.type, x: this.x, y: this.y, isPermanent: this.isPermanent }; },
     setState: function(state) { this.x = state.x; this.y = state.y; }
   };
   modules.push(outputModule);
-  analyser.connect(audioContext.destination);
   setupEventListeners();
   draw();
 }
@@ -802,98 +816,110 @@ function setupEventListeners() {
   document.addEventListener('keydown', onKeyDown);
   document.addEventListener('keyup', onKeyUp);
 
-  // --- LÓGICA DE MENÚ CORREGIDA Y MEJORADA ---
   document.querySelectorAll('#context-menu .context-menu-item').forEach(item => {
-    // Mostrar submenú al pasar el ratón
     if (item.classList.contains('context-menu-has-submenu')) {
       item.addEventListener('mouseenter', () => {
-        const submenu = item.querySelector('.context-submenu');
-        if (submenu) {
-          submenu.style.left = `${item.offsetWidth}px`;
-          submenu.style.top = `0px`;
-          submenu.style.display = 'block';
-        }
+          const submenu = item.querySelector('.context-submenu');
+          if (submenu) { submenu.style.display = 'block'; }
+      });
+      item.addEventListener('mouseleave', () => {
+          const submenu = item.querySelector('.context-submenu');
+          if (submenu) { submenu.style.display = 'none'; }
       });
     }
-
-    // Añadir módulo al hacer clic
     item.addEventListener('click', async (e) => {
-      // Si es un submenú, no hacer nada al hacer clic en el padre
-      if (e.currentTarget.classList.contains('context-menu-has-submenu')) {
-        e.stopPropagation();
-        return;
-      }
-      
+      if (e.currentTarget.classList.contains('context-menu-has-submenu')) { e.stopPropagation(); return; }
       const moduleType = e.currentTarget.getAttribute('data-module');
       if (moduleType) {
         const worldPos = screenToWorld(parseFloat(contextMenu.style.left), parseFloat(contextMenu.style.top));
         await addModule(moduleType, worldPos.x, worldPos.y);
       }
-      
-      // Ocultar todos los menús
       contextMenu.style.display = 'none';
       document.querySelectorAll('.context-submenu').forEach(sub => sub.style.display = 'none');
     });
   });
 
   window.addEventListener('click', (e) => {
-    if (!contextMenu.contains(e.target)) {
-      contextMenu.style.display = 'none';
-      document.querySelectorAll('.context-submenu').forEach(sub => sub.style.display = 'none');
-    }
+    if (!contextMenu.contains(e.target)) { contextMenu.style.display = 'none'; document.querySelectorAll('.context-submenu').forEach(sub => sub.style.display = 'none'); }
     if (!patchContextMenu.contains(e.target)) patchContextMenu.style.display = 'none';
     if (!visualizerContextMenu.contains(e.target)) visualizerContextMenu.style.display = 'none';
   });
-  window.addEventListener('resize', () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  });
+  window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
   window.electronAPI.onRequestLoadPatch(loadPatch);
   window.electronAPI.onRequestSavePatch(savePatch);
   window.electronAPI.onLoadTemplatePatch(loadTemplatePatch);
+
+  // ***** CORRECCIÓN APLICADA: Lógica de manejo de decodificación refactorizada *****
+  window.electronAPI.onDecodeComplete((result) => {
+    if (result.success) {
+        const module = modules.find(m => m.id === result.moduleId);
+        if (!module) {
+            console.error('Módulo no encontrado para el ID:', result.moduleId);
+            showError('Error: Módulo no encontrado.', 5000);
+            return;
+        }
+
+        if (typeof module.loadDecodedData !== 'function') {
+            console.error(`Módulo ${module.type} (ID: ${result.moduleId}) no tiene un método loadDecodedData.`);
+            showError(`Error: Módulo ${module.type} no puede cargar audio.`, 5000);
+            return;
+        }
+
+        try {
+            if (module.type === 'AudioPlayer') {
+                const audioBuffer = audioContext.createBuffer(
+                    result.decodedData.numberOfChannels,
+                    result.decodedData.length,
+                    result.decodedData.sampleRate
+                );
+                for (let i = 0; i < result.decodedData.numberOfChannels; i++) {
+                    audioBuffer.copyToChannel(new Float32Array(result.decodedData.channelData[i]), i);
+                }
+                module.loadDecodedData(audioBuffer);
+            } else if (module.type === 'GranularSampler') {
+                const decodedDataForSampler = { ...result.decodedData };
+                decodedDataForSampler.channelData = decodedDataForSampler.channelData.map(ch => new Float32Array(ch));
+                module.loadDecodedData(decodedDataForSampler);
+            }
+            showError('Audio cargado y decodificado correctamente.', 3000);
+        } catch (e) {
+            console.error(`Error procesando datos decodificados para el módulo ${module.id}:`, e);
+            showError('Error al procesar datos de audio.', 5000);
+        }
+    } else {
+        console.error('Error de decodificación:', result.error);
+        showError(`Error al decodificar audio: ${result.error}`, 5000);
+    }
+  });
+  
   const visualizerModule = document.getElementById('visualizer-module');
   const visualizerHeader = document.querySelector('#visualizer-module .module-header');
-  visualizerModule.style.left = '10px';
-  visualizerModule.style.top = '60px';
-  visualizerModule.style.width = '200px';
-  visualizerModule.style.height = '200px';
-  visualizerModule.style.transform = 'none';
   visualizerHeader.addEventListener('mousedown', (e) => {
     isDraggingVisualizer = true;
-    visualizerDragOffset.x = e.clientX - visualizerHeader.parentElement.offsetLeft;
-    visualizerDragOffset.y = e.clientY - visualizerHeader.parentElement.offsetTop;
+    visualizerDragOffset.x = e.clientX - visualizerModule.offsetLeft;
+    visualizerDragOffset.y = e.clientY - visualizerModule.offsetTop;
   });
-  const visualizerResizeObserver = new ResizeObserver(() => {
-    requestAnimationFrame(() => {
-      if (visualizerCanvas.width !== visualizerCanvas.offsetWidth || visualizerCanvas.height !== visualizerCanvas.offsetHeight) {
-        visualizerCanvas.width = visualizerCanvas.offsetWidth;
-        visualizerCanvas.height = visualizerCanvas.offsetHeight;
-      }
-    });
-  });
-  visualizerResizeObserver.observe(visualizerModule);
+  document.addEventListener('mousemove', (e) => { if (isDraggingVisualizer) { visualizerModule.style.left = `${e.clientX - visualizerDragOffset.x}px`; visualizerModule.style.top = `${e.clientY - visualizerDragOffset.y}px`; } });
+  document.addEventListener('mouseup', () => { isDraggingVisualizer = false; });
+  
   visualizerModule.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     visualizerContextMenu.style.left = `${e.clientX}px`;
     visualizerContextMenu.style.top = `${e.clientY}px`;
     visualizerContextMenu.style.display = 'block';
   });
+
   document.querySelectorAll('#visualizer-context-menu .context-menu-item').forEach(item => {
     item.addEventListener('click', (e) => {
-      currentVisualStyle = e.target.getAttribute('data-style');
+      const styleName = e.target.getAttribute('data-style');
+      if (styleName === 'hide') {
+        document.getElementById('visualizer-module').style.display = 'none';
+        visualizer = null;
+      } else if (visualizer && styleName) {
+        visualizer.setStyle(styleName);
+      }
       visualizerContextMenu.style.display = 'none';
     });
-  });
-  document.addEventListener('mousemove', (e) => {
-    if (isDraggingVisualizer) {
-      const visualizerModule = document.getElementById('visualizer-module');
-      visualizerModule.style.left = `${e.clientX - visualizerDragOffset.x}px`;
-      visualizerModule.style.top = `${e.clientY - visualizerDragOffset.y}px`;
-      visualizerModule.style.transform = 'none';
-    }
-  });
-  document.addEventListener('mouseup', () => {
-    isDraggingVisualizer = false;
   });
 }
 

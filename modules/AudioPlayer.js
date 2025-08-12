@@ -23,23 +23,13 @@ export class AudioPlayer {
         console.log(`[DEBUG] AudioPlayer ${this.id} construido.`);
     }
 
-    loadDecodedData(decodedData) {
+    loadDecodedData(audioBuffer) {
         console.log(`[DEBUG] AudioPlayer ${this.id}: Entrando a loadDecodedData.`);
         try {
             if (this.isPlaying) this.stop();
 
-            const newBuffer = audioContext.createBuffer(
-                decodedData.numberOfChannels,
-                decodedData.length,
-                decodedData.sampleRate
-            );
-
-            for (let i = 0; i < decodedData.numberOfChannels; i++) {
-                newBuffer.copyToChannel(new Float32Array(decodedData.channelData[i]), i);
-            }
-
-            this.audioBuffer = newBuffer;
-            console.log(`[DEBUG] AudioPlayer ${this.id}: Buffer de audio creado y asignado. Duración: ${this.audioBuffer.duration}s`);
+            this.audioBuffer = audioBuffer;
+            console.log(`[DEBUG] AudioPlayer ${this.id}: Buffer de audio asignado. Duración: ${this.audioBuffer.duration}s`);
             
             if (this.onPlaybackStateChange) {
                 this.onPlaybackStateChange(false);

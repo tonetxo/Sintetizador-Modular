@@ -1,5 +1,4 @@
 // modules/Chorus.js
-import { audioContext } from './AudioContext.js';
 import { BaseEffect } from './BaseEffect.js';
 
 export class Chorus extends BaseEffect {

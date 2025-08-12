@@ -113,39 +113,43 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 
-  ipcMain.handle('decode-audio-file', (event, { filePath, moduleId }) => {
-    return new Promise((resolve, reject) => {
-        decoderReadyPromise.then(() => {
-            try {
-                if (!decoderWindow) {
-                    throw new Error('La ventana de decodificación no está disponible.');
-                }
-
-                const onDecodeResult = (event, result) => {
-                    if (result.moduleId === moduleId) {
-                        ipcMain.removeListener('decode-result', onDecodeResult);
-                        if (result.success) {
-                            resolve(result);
-                        } else {
-                            reject(new Error(result.error));
-                        }
-                    }
-                };
-
-                ipcMain.on('decode-result', onDecodeResult);
-
-                const audioData = fs.readFileSync(filePath);
-                // Send the raw buffer; Electron will handle the transfer efficiently.
-                decoderWindow.webContents.send('decode-request', {
-                    audioData: audioData,
-                    moduleId
-                });
-
-            } catch (error) {
-                console.error(`[Main] Error en handle 'decode-audio-file':`, error);
-                reject(error);
+  // ***** CORRECCIÓN APLICADA: Reemplazar 'handle' con 'on' para un flujo de eventos unidireccional *****
+  ipcMain.on('decode-audio-file', (event, { filePath, moduleId }) => {
+    console.log(`[Main] Received decode-audio-file request for module ${moduleId} and file ${filePath}`);
+    
+    decoderReadyPromise.then(() => {
+        try {
+            if (!decoderWindow) {
+                const errorMsg = 'La ventana de decodificación no está disponible.';
+                console.error(`[Main] ${errorMsg}`);
+                mainWindow.webContents.send('decode-complete', { success: false, moduleId, error: errorMsg });
+                return;
             }
-        }).catch(reject); // Captura errores de la promesa decoderReadyPromise
+
+            // Este listener es específico para esta petición.
+            const onDecodeResult = (e, result) => {
+                // Asegurarse de que estamos manejando el resultado para el módulo correcto.
+                if (result.moduleId === moduleId) {
+                    ipcMain.removeListener('decode-result', onDecodeResult); // Limpiar el listener
+                    console.log(`[Main] Forwarding decode-complete for module ${moduleId} to renderer.`);
+                    // Reenviar el resultado a la ventana del renderizador.
+                    mainWindow.webContents.send('decode-complete', result);
+                }
+            };
+            ipcMain.on('decode-result', onDecodeResult);
+
+            const audioData = fs.readFileSync(filePath);
+            decoderWindow.webContents.send('decode-request', { audioData, moduleId });
+            console.log(`[Main] Sent decode-request to decoderWindow for module ${moduleId}.`);
+
+        } catch (error) {
+            console.error(`[Main] Error processing 'decode-audio-file':`, error);
+            mainWindow.webContents.send('decode-complete', { success: false, moduleId, error: error.message });
+        }
+    }).catch(error => {
+        const errorMsg = 'Error con la promesa de la ventana de decodificación.';
+        console.error(`[Main] ${errorMsg}`, error);
+        mainWindow.webContents.send('decode-complete', { success: false, moduleId, error: errorMsg });
     });
   });
 
@@ -181,6 +185,41 @@ app.whenReady().then(() => {
   ipcMain.handle('log-message', (event, message) => {
     const logFilePath = path.join(app.getPath('userData'), 'app.log');
     fs.appendFileSync(logFilePath, `[${new Date().toISOString()}] ${message}\n`);
+  });
+
+  ipcMain.handle('save-recording', async (event, buffer) => {
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Guardar Grabación',
+      defaultPath: 'grabacion.webm',
+      filters: [{ name: 'WebM Audio', extensions: ['webm'] }]
+    });
+
+    if (canceled || !filePath) {
+      return { success: false };
+    }
+
+    try {
+      fs.writeFileSync(filePath, Buffer.from(buffer));
+      return { success: true, path: filePath };
+    } catch (error) {
+      console.error('Failed to save recording:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('open-audio-file-dialog', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Cargar Archivo de Audio',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Audio Files', extensions: ['wav', 'mp3', 'ogg', 'flac', 'aac', 'webm'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+    if (canceled || filePaths.length === 0) {
+      return { success: false };
+    }
+    return { success: true, filePath: filePaths[0] };
   });
 
   mainWindow.loadFile('index.html');

@@ -1,5 +1,4 @@
 // modules/Flanger.js
-import { audioContext } from './AudioContext.js';
 import { BaseEffect } from './BaseEffect.js';
 
 export class Flanger extends BaseEffect {

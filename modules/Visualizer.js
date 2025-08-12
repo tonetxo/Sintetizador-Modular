@@ -3,6 +3,8 @@ import { drawBars } from './visualizations/SpectralAnalyzer.js';
 import { drawConcentricWaves } from './visualizations/ConcentricWaves.js';
 import { drawNeonDNA } from './visualizations/NeonDNA.js';
 import { drawGalacticOrb } from './visualizations/GalacticOrb.js';
+import { drawLavaLamp } from './visualizations/LavaLamp.js'; // <-- NUEVO
+import { drawStardustField } from './visualizations/StardustField.js'; // <-- NUEVO
 
 // Mapeo de nombres de estilo a funciones de dibujo
 const STYLES = {
@@ -10,6 +12,8 @@ const STYLES = {
     'concentric_waves': drawConcentricWaves,
     'neon_dna': drawNeonDNA,
     'galactic_orb': drawGalacticOrb,
+    'lava_lamp': drawLavaLamp, // <-- NUEVO
+    'stardust_field': drawStardustField, // <-- NUEVO
 };
 
 export class Visualizer {
@@ -22,10 +26,9 @@ export class Visualizer {
         }
         this.ctx = this.canvas.getContext('2d');
         this.dataArray = null;
-        this.currentStyle = 'galactic_orb'; // Puedes poner aquí tu estilo favorito por defecto
+        this.currentStyle = 'galactic_orb';
         this.active = true;
 
-        // Asegurarse de que el tamaño del canvas se ajusta a su contenedor
         const resizeObserver = new ResizeObserver(() => {
             requestAnimationFrame(() => {
                 if (this.canvas.width !== this.canvas.offsetWidth || this.canvas.height !== this.canvas.offsetHeight) {
@@ -36,15 +39,10 @@ export class Visualizer {
         });
         resizeObserver.observe(this.canvas.parentElement);
         
-        // Asignación inicial del tamaño
         this.canvas.width = this.canvas.offsetWidth;
         this.canvas.height = this.canvas.offsetHeight;
     }
 
-    /**
-     * Cambia el estilo de visualización actual.
-     * @param {string} styleName - El nombre del estilo a activar.
-     */
     setStyle(styleName) {
         if (STYLES[styleName]) {
             this.currentStyle = styleName;
@@ -54,14 +52,9 @@ export class Visualizer {
         }
     }
 
-    /**
-     * Dibuja el frame actual de la visualización.
-     * @param {AnalyserNode} analyser - El nodo analizador de Web Audio API.
-     */
     draw(analyser) {
         if (!this.active || !analyser) return;
 
-        // Inicializar dataArray si es necesario
         if (!this.dataArray || this.dataArray.length !== analyser.frequencyBinCount) {
             this.dataArray = new Uint8Array(analyser.frequencyBinCount);
         }

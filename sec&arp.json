@@ -7,7 +7,7 @@
       "y": 410,
       "isPermanent": true,
       "portamentoValue": 0.12307692307692308,
-      "octave": 2
+      "octave": 3
     },
     {
       "id": "output-main",
@@ -37,7 +37,7 @@
       "type": "ADSR",
       "x": 1052,
       "y": 438,
-      "attack": 0.5157916666666666,
+      "attack": 0.46483357083333215,
       "decay": 0.1,
       "sustain": 0.8,
       "release": 0.2
@@ -45,35 +45,35 @@
     {
       "id": "arpeggiator-1754419746358",
       "type": "Arpeggiator",
-      "x": 404,
-      "y": 296,
-      "portamentoValue": 0.19000000000000003,
+      "x": 361.82309999999995,
+      "y": 486.1176000000001,
+      "portamentoValue": 0.43500000000000005,
       "tempo": 179.6875,
       "mode": 3,
       "octaveRange": 0,
       "gateLength": 0.529296875,
       "hold": true,
-      "running": true
+      "running": false
     },
     {
       "id": "adsr-1754519039157",
       "type": "ADSR",
-      "x": 1055,
-      "y": 45,
-      "attack": 0.4747064583333344,
-      "decay": 0.1,
-      "sustain": 0.8,
+      "x": 1028.6462000000001,
+      "y": 83.0666,
+      "attack": 0.3504243249999999,
+      "decay": 0.8238776624999998,
+      "sustain": 0.2930758333333332,
       "release": 0.2
     },
     {
       "id": "sequencer-1754519055171",
       "type": "Sequencer",
-      "x": -160,
-      "y": -29,
+      "x": -157.0718,
+      "y": -20.21539999999999,
       "tempo": 120,
       "direction": 3,
       "numberOfSteps": 16,
-      "running": true,
+      "running": false,
       "sequence": [
         0.20420000000000088,
         0.15420000000000086,
@@ -113,13 +113,13 @@
       "stepStates": [
         0,
         0,
-        0,
+        2,
         0,
         1,
         0,
         2,
         0,
-        0,
+        2,
         0,
         0,
         0,
@@ -137,29 +137,27 @@
       "frequency": 440,
       "detune": 0,
       "waveform": "square",
-      "pulseWidth": 0.5
+      "pulseWidth": 0.23097162499999985
     },
     {
       "id": "vcf-1754519082468",
       "type": "VCF",
-      "x": 775.676,
-      "y": -132.683,
-      "cutoff": 344.71990966796875,
+      "x": 770.676,
+      "y": -107.68299999999999,
+      "cutoff": 115.24951171875,
       "resonance": 4.8252272605896,
-      "filterType": "notch",
+      "filterType": "highpass",
       "bypassed": false
     },
     {
       "id": "mixer-1754519091595",
       "type": "Mixer",
-      "x": 1215,
-      "y": -136,
-      "levels": [
-        1,
-        0.4099999964237213,
-        0,
-        0
-      ]
+      "x": 1099,
+      "y": -195,
+      "gain0": 0.75,
+      "gain1": 0.7692307829856873,
+      "gain2": 0,
+      "gain3": 0
     },
     {
       "id": "clock-1754519133576",
@@ -167,16 +165,16 @@
       "x": -198,
       "y": 501,
       "tempo": 120,
-      "running": true
+      "running": false
     },
     {
       "id": "lfo-1754519360821",
       "type": "LFO",
-      "x": 11.234000000000037,
-      "y": 568.3279999999999,
+      "x": 28.803200000000032,
+      "y": 572.7202999999998,
       "rate": 2.6087000370025635,
-      "depth": 1.5488165616989136,
-      "attack": 0.1,
+      "depth": 0.2681593894958496,
+      "attack": 1.541630110833322,
       "waveform": "sine",
       "isBypassed": false
     }
@@ -237,18 +235,6 @@
       "toConnector": "audio"
     },
     {
-      "fromId": "vcf-1754519082468",
-      "fromConnector": "audio",
-      "toId": "mixer-1754519091595",
-      "toConnector": "In 1"
-    },
-    {
-      "fromId": "vco-1754419725142",
-      "fromConnector": "Out",
-      "toId": "mixer-1754519091595",
-      "toConnector": "In 2"
-    },
-    {
       "fromId": "clock-1754519133576",
       "fromConnector": "CLOCK_OUT",
       "toId": "sequencer-1754519055171",
@@ -259,12 +245,6 @@
       "fromConnector": "CLOCK_OUT",
       "toId": "arpeggiator-1754419746358",
       "toConnector": "CLOCK_IN"
-    },
-    {
-      "fromId": "mixer-1754519091595",
-      "fromConnector": "Out",
-      "toId": "vca-1754419728310",
-      "toConnector": "audio"
     },
     {
       "fromId": "sequencer-1754519055171",
@@ -283,6 +263,36 @@
       "fromConnector": "TENSION",
       "toId": "vcf-1754519082468",
       "toConnector": "CV 2"
+    },
+    {
+      "fromId": "vco-1754419725142",
+      "fromConnector": "Out",
+      "toId": "mixer-1754519091595",
+      "toConnector": "IN 2"
+    },
+    {
+      "fromId": "vcf-1754519082468",
+      "fromConnector": "audio",
+      "toId": "mixer-1754519091595",
+      "toConnector": "IN 1"
+    },
+    {
+      "fromId": "mixer-1754519091595",
+      "fromConnector": "SALIDA",
+      "toId": "vca-1754419728310",
+      "toConnector": "audio"
+    },
+    {
+      "fromId": "sequencer-1754519055171",
+      "fromConnector": "DISPARO",
+      "toId": "adsr-1754519039157",
+      "toConnector": "Gate"
+    },
+    {
+      "fromId": "lfo-1754519360821",
+      "fromConnector": "SALIDA",
+      "toId": "vco-1754519075226",
+      "toConnector": "PWM"
     }
   ]
 }

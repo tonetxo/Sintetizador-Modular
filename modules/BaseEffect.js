@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 // modules/BaseEffect.js
 import { audioContext } from './AudioContext.js';
 
@@ -114,7 +115,6 @@ export class BaseEffect {
     }
 
     drawKnobs(ctx) {
-        const numKnobs = this.knobDefs.length;
         const knobsPerRow = 2;
         const rowHeight = 70;
         this.knobDefs.forEach((def, i) => {
@@ -173,15 +173,15 @@ export class BaseEffect {
         ctx.font = '10px Arial';
         ctx.fillStyle = '#E0E0E0';
 
-        Object.entries(this.inputs).forEach(([name, props]) => {
-            const isHovered = hovered?.module === this && hovered?.connector.name === name;
+        Object.entries(this.inputs).forEach(([_name, props]) => { 
+            const isHovered = hovered?.module === this && hovered?.connector.name === _name;
             const ix = props.x, iy = props.y;
             ctx.beginPath();
             ctx.arc(ix, iy, connectorRadius, 0, Math.PI * 2);
             ctx.fillStyle = isHovered ? 'white' : '#4a90e2';
             ctx.fill();
             ctx.textAlign = 'left';
-            ctx.fillText(name, ix + connectorRadius + 4, iy + 4);
+            ctx.fillText(_name, ix + connectorRadius + 4, iy + 4);
         });
 
         Object.entries(this.outputs).forEach(([name, props]) => {

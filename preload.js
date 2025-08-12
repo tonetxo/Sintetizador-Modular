@@ -8,8 +8,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onRequestLoadPatch: (callback) => ipcRenderer.on('request-load-patch', callback),
   onRequestSavePatch: (callback) => ipcRenderer.on('request-save-patch', callback),
   logMessage: (message) => ipcRenderer.invoke('log-message', message),
-  // ***** CORRECCIÓN APLICADA: Volvemos a .invoke *****
-  decodeAudioFile: (filePath, moduleId) => ipcRenderer.invoke('decode-audio-file', { filePath, moduleId }),
-  onDecodeComplete: (callback) => ipcRenderer.on('decode-complete', callback),
+  saveRecording: (buffer) => ipcRenderer.invoke('save-recording', buffer),
+  openAudioFileDialog: () => ipcRenderer.invoke('open-audio-file-dialog'),
+  // ***** CORRECCIÓN APLICADA: Cambiamos a 'send' para un flujo basado en eventos *****
+  decodeAudioFile: (filePath, moduleId) => ipcRenderer.send('decode-audio-file', { filePath, moduleId }),
+  onDecodeComplete: (callback) => ipcRenderer.on('decode-complete', (event, result) => callback(result)),
   onLoadTemplatePatch: (callback) => ipcRenderer.on('load-template-patch', (event, templateName) => callback(templateName))
 });
