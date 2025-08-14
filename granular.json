@@ -1,0 +1,155 @@
+{
+  "modules": [
+    {
+      "id": "keyboard-main",
+      "type": "Keyboard",
+      "x": 50,
+      "y": 725,
+      "isPermanent": true,
+      "octave": 4,
+      "portamento": 0.05
+    },
+    {
+      "id": "speaker-main",
+      "type": "Speaker",
+      "x": 845,
+      "y": 377.5,
+      "isPermanent": true
+    },
+    {
+      "id": "granularsampler-1755174958520",
+      "type": "GranularSampler",
+      "x": 244,
+      "y": 122,
+      "params": {
+        "position": 0.5,
+        "grainSize": 0.40744444444444444,
+        "grainRate": 20,
+        "pitch": 1,
+        "spread": 0.1,
+        "randomness": 0,
+        "pitchShift": true,
+        "stereoSpread": 0.8555555555555555
+      }
+    },
+    {
+      "id": "adsr-1755175016795",
+      "type": "ADSR",
+      "x": 570,
+      "y": 520,
+      "attack": 0.5253671875,
+      "decay": 1.692953125,
+      "sustain": 0.846875,
+      "release": 1.6840781249999999
+    },
+    {
+      "id": "lfo-1755175059907",
+      "type": "LFO",
+      "x": -25,
+      "y": 249,
+      "bypassed": false,
+      "rate": 0.037074244383388896,
+      "depth": 0.2509640418752844,
+      "attack": 2.3336666666666663,
+      "waveform": "sine"
+    },
+    {
+      "id": "lfo-1755191099041",
+      "type": "LFO",
+      "x": -209,
+      "y": 252,
+      "bypassed": false,
+      "rate": 0.02852711459375567,
+      "depth": 0.15612198452435136,
+      "attack": 1.7505,
+      "waveform": "triangle"
+    },
+    {
+      "id": "vca-1755174994386",
+      "type": "VCA",
+      "x": 601,
+      "y": 120,
+      "gain": 0.8
+    }
+  ],
+  "connections": [
+    {
+      "sourceId": "keyboard-main",
+      "sourcePort": "Gate",
+      "destId": "adsr-1755175016795",
+      "destPort": "Gate"
+    },
+    {
+      "sourceId": "adsr-1755175016795",
+      "sourcePort": "CV",
+      "destId": "vca-1755174994386",
+      "destPort": "CV1"
+    },
+    {
+      "sourceId": "lfo-1755175059907",
+      "sourcePort": "Out",
+      "destId": "granularsampler-1755174958520",
+      "destPort": "Pos"
+    },
+    {
+      "sourceId": "keyboard-main",
+      "sourcePort": "Gate",
+      "destId": "lfo-1755175059907",
+      "destPort": "Gate"
+    },
+    {
+      "sourceId": "keyboard-main",
+      "sourcePort": "CV",
+      "destId": "granularsampler-1755174958520",
+      "destPort": "Pitch"
+    },
+    {
+      "sourceId": "lfo-1755191099041",
+      "sourcePort": "Out",
+      "destId": "granularsampler-1755174958520",
+      "destPort": "Size"
+    },
+    {
+      "sourceId": "keyboard-main",
+      "sourcePort": "Gate",
+      "destId": "lfo-1755191099041",
+      "destPort": "Gate"
+    },
+    {
+      "sourceId": "lfo-1755175059907",
+      "sourcePort": "Out",
+      "destId": "lfo-1755191099041",
+      "destPort": "Rate CV"
+    },
+    {
+      "sourceId": "lfo-1755191099041",
+      "sourcePort": "Out",
+      "destId": "lfo-1755175059907",
+      "destPort": "Depth CV"
+    },
+    {
+      "sourceId": "granularsampler-1755174958520",
+      "sourcePort": "Out L",
+      "destId": "vca-1755174994386",
+      "destPort": "In L"
+    },
+    {
+      "sourceId": "granularsampler-1755174958520",
+      "sourcePort": "Out R",
+      "destId": "vca-1755174994386",
+      "destPort": "In R"
+    },
+    {
+      "sourceId": "vca-1755174994386",
+      "sourcePort": "Out L",
+      "destId": "speaker-main",
+      "destPort": "In L"
+    },
+    {
+      "sourceId": "vca-1755174994386",
+      "sourcePort": "Out R",
+      "destId": "speaker-main",
+      "destPort": "In R"
+    }
+  ]
+}

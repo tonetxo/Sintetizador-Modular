@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob: worklet:; style-src 'self' 'unsafe-inline';">
+    <title>Sintetizador Modular</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+    <canvas id="main-canvas"></canvas>
+
+    <div id="module-container" style="display: none;"></div>
+    <script type="module" src="renderer.js"></script>
+</body>
+</html>

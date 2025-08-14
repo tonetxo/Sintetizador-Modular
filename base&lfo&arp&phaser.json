@@ -1,0 +1,158 @@
+{
+  "modules": [
+    {
+      "id": "keyboard-main",
+      "type": "Keyboard",
+      "x": 50,
+      "y": 725,
+      "isPermanent": true,
+      "octave": 3,
+      "portamento": 0.3464594568705807
+    },
+    {
+      "id": "speaker-main",
+      "type": "Speaker",
+      "x": 1219.9344917597975,
+      "y": 429.54500001768537,
+      "isPermanent": true
+    },
+    {
+      "id": "vco-1755083685369",
+      "type": "VCO",
+      "x": 411.6090363151358,
+      "y": 26.11891978481559,
+      "frequency": 440,
+      "detune": 0,
+      "waveform": "triangle",
+      "pulseWidth": 0.5
+    },
+    {
+      "id": "adsr-1755083690449",
+      "type": "ADSR",
+      "x": 745.8869698821485,
+      "y": 492.0703335821206,
+      "attack": 0.001,
+      "decay": 1.0545131878587766,
+      "sustain": 0.31342036641266446,
+      "release": 2.086541148777915
+    },
+    {
+      "id": "vca-1755083694953",
+      "type": "VCA",
+      "x": 859.461878045521,
+      "y": 168.70818916059187,
+      "gain": 0.7462321176834397
+    },
+    {
+      "id": "lfo-1755099551767",
+      "type": "LFO",
+      "x": 89,
+      "y": 112,
+      "bypassed": false,
+      "rate": 4.727590478419579,
+      "depth": 0.02413145290156858,
+      "attack": 2.3543997670060253,
+      "waveform": "sine"
+    },
+    {
+      "id": "arpeggiator-1755127864547",
+      "type": "Arpeggiator",
+      "x": -323.9532474257519,
+      "y": 201.59491707273617,
+      "mode": "up-down",
+      "octaves": 2,
+      "hold": false,
+      "running": false,
+      "tempo": 120,
+      "gateLength": 0.8
+    },
+    {
+      "id": "phaser-1755127997636",
+      "type": "Phaser",
+      "x": 1107.0029143150834,
+      "y": 118.55061230714955,
+      "bypassed": true,
+      "rate": 1.1493818349168647,
+      "depth": 1047.2488559087392,
+      "frequency": 263.2019855021361,
+      "feedback": 0.6069238867433169,
+      "stages": 12
+    },
+    {
+      "id": "reverb-1755127977716",
+      "type": "Reverb",
+      "x": 1433.8179933112485,
+      "y": 128.70924496254437,
+      "mix": 0.2760681284458354,
+      "decay": 1.4654254604951582
+    }
+  ],
+  "connections": [
+    {
+      "sourceId": "adsr-1755083690449",
+      "sourcePort": "CV",
+      "destId": "vca-1755083694953",
+      "destPort": "CV1"
+    },
+    {
+      "sourceId": "vco-1755083685369",
+      "sourcePort": "Out",
+      "destId": "vca-1755083694953",
+      "destPort": "In"
+    },
+    {
+      "sourceId": "lfo-1755099551767",
+      "sourcePort": "Out",
+      "destId": "vco-1755083685369",
+      "destPort": "FM1"
+    },
+    {
+      "sourceId": "arpeggiator-1755127864547",
+      "sourcePort": "CV",
+      "destId": "vco-1755083685369",
+      "destPort": "1v/oct"
+    },
+    {
+      "sourceId": "arpeggiator-1755127864547",
+      "sourcePort": "Gate",
+      "destId": "lfo-1755099551767",
+      "destPort": "Gate"
+    },
+    {
+      "sourceId": "arpeggiator-1755127864547",
+      "sourcePort": "Gate",
+      "destId": "adsr-1755083690449",
+      "destPort": "Gate"
+    },
+    {
+      "sourceId": "keyboard-main",
+      "sourcePort": "CV",
+      "destId": "arpeggiator-1755127864547",
+      "destPort": "CV In"
+    },
+    {
+      "sourceId": "keyboard-main",
+      "sourcePort": "Gate",
+      "destId": "arpeggiator-1755127864547",
+      "destPort": "Gate In"
+    },
+    {
+      "sourceId": "reverb-1755127977716",
+      "sourcePort": "Out",
+      "destId": "speaker-main",
+      "destPort": "In"
+    },
+    {
+      "sourceId": "vca-1755083694953",
+      "sourcePort": "Out",
+      "destId": "phaser-1755127997636",
+      "destPort": "In"
+    },
+    {
+      "sourceId": "phaser-1755127997636",
+      "sourcePort": "Out",
+      "destId": "reverb-1755127977716",
+      "destPort": "In"
+    }
+  ]
+}
